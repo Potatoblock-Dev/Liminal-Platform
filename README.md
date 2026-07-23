@@ -70,7 +70,9 @@ Agent / 协作者约定见 Cursor skill **`liminal-platform-dev`**、**`potatobl
 
 **改功能顺序：** 协议与消息类型 → 服务端权威 → 画面 / 操作。
 
-细节见 [`docs/networking-plan.md`](docs/networking-plan.md)。
+细节见 [`docs/liminal-protocol.md`](docs/liminal-protocol.md)（月台 WS）；大厅皮套联机见 [`docs/networking-plan.md`](docs/networking-plan.md)。
+
+**前端 TS（Phase 1）：** `client/src/` → `npm run build` → `app/games/liminal_platform/static/js/lp-network.js` / `lp-session.js`。
 
 ---
 
@@ -81,9 +83,12 @@ Liminal-Platform/
 ├── run_local.py                 # 仅本地启动
 ├── requirements.txt
 ├── docs/
-│   ├── networking-plan.md       # 联网权威、消息契约
+│   ├── liminal-protocol.md      # 月台 WS 协议（与大厅 avatar 协议分开）
+│   ├── networking-plan.md       # 大厅联网权威
 │   ├── skin-format.md           # 皮套格式
 │   └── motion-references.md     # 动作参考
+├── client/                      # TypeScript 源（Vite 构建进 static/js）
+├── package.json                 # npm run build
 ├── game/Liminal_Platform/       # 开发镜像（与挂载包同步）
 ├── var/uploads/skins/           # 运行时上传（gitignore）
 └── app/

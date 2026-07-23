@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+node_modules/
 
 # 本地上传的皮套与运行时数据，不进版本库
 var/

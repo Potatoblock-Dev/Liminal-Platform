@@ -1,0 +1,14 @@
+{
+  "name": "liminal-platform-client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node client/build.mjs",
+    "dev": "node client/build.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
