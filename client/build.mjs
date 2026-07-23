@@ -36,6 +36,7 @@ async function buildOne({ name, entry, globalName }) {
       outDir,
       emptyOutDir: false,
       sourcemap: true,
+      target: 'es2020',
       lib: {
         entry,
         name: globalName,

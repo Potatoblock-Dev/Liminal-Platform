@@ -5,7 +5,9 @@
   "scripts": {
     "build": "node client/build.mjs",
     "dev": "node client/build.mjs --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepare:release": "python3 scripts/prepare_liminal_release.py",
+    "check:protocol": "python3 scripts/prepare_liminal_release.py --skip-build"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

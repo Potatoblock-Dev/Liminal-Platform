@@ -66,6 +66,10 @@
 cd potatoblock-avatar-lobby   # 或本仓根
 npm install
 npm run build                 # 写入 app/games/liminal_platform/static/js/lp-*.js
+# 或一键发布前检查（协议对齐 + build + 镜像）
+python3 scripts/prepare_liminal_release.py
 ```
+
+`push-liminal-platform.py` / `push-github.py --package …/avatar-lobby` **会自动跑** `prepare_liminal_release.py`，防止忘构建或主站缺 `protocol.py`。
 
 产物进 git（生产 CD 无 Node）。后续模块（inventory-net / combat / UI）同法迁入 `client/src/`。

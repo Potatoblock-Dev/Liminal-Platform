@@ -2,11 +2,14 @@
 
 与大厅 avatar（docs/networking-plan.md, PROTOCOL_VERSION=6）不是同一套。
 改字段时同步：本文件、client/src/protocol/messages.ts、docs/liminal-protocol.md
+
+注意：仅使用 typing 标准库（无 NotRequired），兼容 Python 3.10+ 生产环境。
+可选字段（aimX、throttle 等）在运行时可能缺失，以 TS / 文档为准。
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, NotRequired, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 
 PROTOCOL_VERSION = 1
 PUBLIC_ROOM_ID = "public"
@@ -27,8 +30,6 @@ class PoseMessage(TypedDict):
     gait: Literal["walk", "run"]
     headLook: float
     heldId: Optional[str]
-    aimX: NotRequired[float]
-    aimY: NotRequired[float]
 
 
 class JoinMessage(TypedDict):
@@ -45,14 +46,11 @@ class CreateMessage(TypedDict):
 class TrainMessage(TypedDict):
     type: Literal["train"]
     protocolVersion: int
-    throttle: NotRequired[float]
-    brake: NotRequired[float]
 
 
 class FuelAddMessage(TypedDict):
     type: Literal["fuel_add"]
     protocolVersion: int
-    amount: NotRequired[float]
     itemId: str
 
 
@@ -63,16 +61,11 @@ class FireMessage(TypedDict):
     y: float
     dirX: float
     dirY: float
-    facing: NotRequired[float]
-    source: NotRequired[str]
-    handIndex: NotRequired[int]
-    weaponId: NotRequired[str]
 
 
 class InvMessage(TypedDict):
     type: Literal["inv"]
     protocolVersion: int
-    # 其余字段按 op 扩展（transfer / reload / crate …）
 
 
 class AppearanceOutMessage(TypedDict):
@@ -120,8 +113,6 @@ class SnapshotPlayer(TypedDict):
     appearance: Dict[str, Any]
     connected: bool
     heldId: Optional[str]
-    aimX: NotRequired[float]
-    aimY: NotRequired[float]
 
 
 class WorldSnapshotMessage(TypedDict):
