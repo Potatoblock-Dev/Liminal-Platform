@@ -1,0 +1,24 @@
+.upload_exprs/
+*.pyc
+__pycache__/
+.DS_Store
+.venv/
+venv/
+.pytest_cache/
+
+# 本地上传的皮套与运行时数据，不进版本库
+var/
+.env
+.env.*
+
+# Liminal Platform / avatar-lobby local
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+var/
+uploads/
+.env
+.env.*
