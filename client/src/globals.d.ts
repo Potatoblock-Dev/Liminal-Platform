@@ -102,12 +102,21 @@ declare global {
       }>) => void;
       noteRemoteFire?: (detail: Record<string, unknown>) => void;
     };
+    LpGame?: {
+      isUiOpen?: () => boolean;
+      getLocalAvatar?: () => Record<string, unknown>;
+    };
     LpItemCatalog?: {
       getItem?: (id: string) => unknown;
     };
     LpWeaponHold?: {
       drawHeldWeapon?: (
         ctx: CanvasRenderingContext2D,
+        entity: Record<string, unknown>,
+        aim: { x: number; y: number },
+        item: unknown
+      ) => void;
+      applyAimArmPose?: (
         entity: Record<string, unknown>,
         aim: { x: number; y: number },
         item: unknown

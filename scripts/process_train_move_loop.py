@@ -160,15 +160,45 @@ def normalize_peak(samples: list[int], peak: float = 0.88) -> list[int]:
     return [int(max(-32767, min(32767, round(v * scale)))) for v in samples]
 
 
-def apply_loop_crossfade(segment: list[int], rate: int, fade_ms: int = 100) -> list[int]:
-    """首尾交叉淡入淡出，便于 Web Audio 循环。"""
+def bass_boost(
+    samples: list[int],
+    rate: int,
+    shelf_hz: float = 70.0,
+    gain: float = 1.7,
+) -> list[int]:
+    """低频搁架放大：增强轰隆感，高频保持原样。"""
+    rc = 1.0 / (2.0 * math.pi * shelf_hz)
+    dt = 1.0 / rate
+    alpha = dt / (rc + dt)
+    y = 0.0
+    out: list[int] = []
+    for x in samples:
+        xf = float(x)
+        y += alpha * (xf - y)
+        v = y * gain + (xf - y)
+        out.append(int(max(-32767, min(32767, round(v)))))
+    return out
+
+
+def apply_loop_crossfade(segment: list[int], rate: int, fade_ms: int = 160) -> list[int]:
+    """Overlap-add 尾→头后截短 fade，使 BufferSource.loop 首尾连续。
+
+    旧实现同时改两端且不截短，接点仍会跳；正确做法是缩短 fade 长度，
+    让 shortened[-1] 与 shortened[0] 在原始波形上相邻。
+    """
     fade = int(rate * fade_ms / 1000)
     fade = max(1, min(fade, len(segment) // 4))
-    out = segment[:]
+    if len(segment) <= fade * 2:
+        return segment[:]
+    out_len = len(segment) - fade
+    out = list(segment[:out_len])
     for i in range(fade):
         t = i / fade
-        out[i] = int(out[i] * t + out[-fade + i] * (1 - t))
-        out[-fade + i] = int(out[-fade + i] * t + segment[i] * (1 - t))
+        # equal-power：头权重 sin、尾权重 cos
+        a = math.sin(t * math.pi * 0.5)
+        b = math.cos(t * math.pi * 0.5)
+        v = segment[i] * a + segment[len(segment) - fade + i] * b
+        out[i] = int(max(-32767, min(32767, round(v))))
     return out
 
 
@@ -196,8 +226,10 @@ def main() -> None:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--work-wav", type=Path, default=None)
-    parser.add_argument("--loop-seconds", type=float, default=4.0)
-    parser.add_argument("--lowpass-hz", type=float, default=380.0)
+    parser.add_argument("--loop-seconds", type=float, default=4.5)
+    parser.add_argument("--lowpass-hz", type=float, default=520.0)
+    parser.add_argument("--fade-ms", type=int, default=180)
+    parser.add_argument("--bass-gain", type=float, default=1.7)
     parser.add_argument(
         "--start",
         type=float,
@@ -235,15 +267,18 @@ def main() -> None:
 
     loop = samples[start:end]
     loop = lowpass_one_pole(loop, rate, args.lowpass_hz)
+    loop = bass_boost(loop, rate, shelf_hz=70.0, gain=args.bass_gain)
     loop = normalize_peak(loop)
-    loop = apply_loop_crossfade(loop, rate)
+    loop = apply_loop_crossfade(loop, rate, fade_ms=args.fade_ms)
+    loop = normalize_peak(loop)
     write_wav_mono(loop_wav, loop, rate)
     convert_to_m4a(loop_wav, args.output)
 
     duration = len(loop) / rate
     print(f"loop: {duration:.2f}s @ {rate}Hz")
     print(f"source slice: {start / rate:.1f}s – {end / rate:.1f}s")
-    print(f"lowpass: {args.lowpass_hz:.0f} Hz")
+    print(f"lowpass: {args.lowpass_hz:.0f} Hz  fade: {args.fade_ms} ms  bass×{args.bass_gain}")
+    print(f"wrap jump: {loop[0] - loop[-1]}")
     print(f"written: {args.output}")
 
 

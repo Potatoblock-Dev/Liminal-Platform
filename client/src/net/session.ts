@@ -261,6 +261,9 @@ export function installLiminalSession(): void {
     const held = window.LpCombat?.getHeldWeaponItem?.();
     const turretManned = Boolean(window.LpGuardTurret?.isManned?.());
     const turretId = window.LpGuardTurret?.getMannedId?.();
+    // 控制台打开时不上报 heldId，远端也不画枪（本机库存槽不变）。
+    const suppressHeld =
+      turretManned || Boolean(window.LpGame?.isUiOpen?.());
     session.sendPose({
       sequence: poseSequence,
       x: frame.x,
@@ -271,7 +274,7 @@ export function installLiminalSession(): void {
       onGround: frame.onGround,
       gait: frame.gait,
       headLook: frame.headLook,
-      heldId: turretManned ? null : held?.id || null,
+      heldId: suppressHeld ? null : held?.id || null,
       aimX: frame.aimX,
       aimY: frame.aimY,
       turretId:
@@ -345,7 +348,7 @@ export function installLiminalSession(): void {
     return { x: (remote.x ?? 0) + facing * 140, y: (remote.y ?? 0) - 56 };
   }
 
-  /** 绘制远端玩家（持枪层序与本机一致：身→后臂→枪→前臂）。 */
+  /** 绘制远端玩家（持枪层序与本机一致；入座炮塔时不画手持枪）。 */
   function drawRemotes(
     ctx: CanvasRenderingContext2D,
     view: unknown,
@@ -353,18 +356,18 @@ export function installLiminalSession(): void {
   ): void {
     for (const remote of remotePlayers.values()) {
       if (remote._lpDisconnected) continue;
-      const heldId = remote._heldId;
+      const inTurret =
+        remote._turretId === 'left' || remote._turretId === 'right';
+      const heldId = inTurret ? null : remote._heldId;
       const item = heldId ? window.LpItemCatalog?.getItem?.(heldId) : null;
       if (item && window.LpWeaponHold?.drawHeldWeapon) {
         const aim = remoteAimWorld(remote);
-        Entity.applyAimArmPose?.(remote, aim);
+        window.LpWeaponHold.applyAimArmPose?.(remote, aim, item);
         Entity.drawAvatar(ctx, remote, view, dpr, {
-          skipFrontArm: true,
           skipBackArm: true,
         });
-        Entity.drawBackArm?.(ctx, remote);
         window.LpWeaponHold.drawHeldWeapon(ctx, remote, aim, item);
-        Entity.drawFrontArm?.(ctx, remote);
+        Entity.drawBackArm?.(ctx, remote);
       } else {
         Entity.drawAvatar(ctx, remote, view, dpr);
       }
