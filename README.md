@@ -1,60 +1,119 @@
-# 虚拟形象大厅（potatoblock-avatar-lobby）
+# Liminal Platform（阈限月台）
 
-类似虚拟形象大厅的玩法：用户上传符合格式的「皮套」贴图，皮套人可以在 2D 横版场景里做简单移动（左右走、跳跃、单膝跪地）。
+2D 横版联机小游戏：列车车厢探索、皮套角色、持枪/库存、锅炉与卫兵炮塔等。挂在 [Potatoblock](https://game.potatoblock.com/) 网页体系里（登录、大厅入口、共用皮套），**不换引擎**（Canvas 2D + FastAPI）。
 
-**当前只在本地实验，暂不上传 MCS / game.potatoblock.com。** 源码可推到独立仓 [Liminal-Platform](https://github.com/Potatoblock-Dev/Liminal-Platform)（`LIMINAL_PLATFORM_GH_TOKEN` + `push-liminal-platform.py`）。目录结构沿用 potatoblock 系列（`app/games/<游戏包>/`）；若以后要挂到主站，只上传 `app/games/avatar_lobby/` / `liminal_platform/`。
+| | |
+|--|--|
+| 本仓（游戏源码真相） | [Potatoblock-Dev/Liminal-Platform](https://github.com/Potatoblock-Dev/Liminal-Platform) |
+| 门户 / CD 对接仓 | [Potatoblock-Dev/Potatoblock-Game](https://github.com/Potatoblock-Dev/Potatoblock-Game)（只负责挂载与上线，**不要**在那里日常改玩法） |
+| 本地入口 | [http://127.0.0.1:8100/](http://127.0.0.1:8100/) · 月台 [http://127.0.0.1:8100/liminal-platform](http://127.0.0.1:8100/liminal-platform) |
+
+本地工作副本目录名可能仍是 `potatoblock-avatar-lobby/`，与本仓内容对应。
+
+---
 
 ## 本地运行
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python run_local.py
-# 打开 http://127.0.0.1:8100/
 ```
 
-本地不需要登录：`app/routers/auth.py` 是开发用 stub，固定返回一个测试身份。
+打开 [http://127.0.0.1:8100/](http://127.0.0.1:8100/)（大厅）或 [http://127.0.0.1:8100/liminal-platform](http://127.0.0.1:8100/liminal-platform)。
+
+本地鉴权是 stub（`app/routers/auth.py`），固定测试身份，无需真实登录。生产鉴权只在主站 MCS 实例上。
+
+---
+
+## 仓库分工
+
+```
+改玩法 / 协议 / 资源  →  本仓 Liminal-Platform
+挂登录、进大厅、CD 上线  →  Potatoblock-Game（vendor 本仓的 games 包）
+```
+
+| Token（本地 `potatogame/.env`） | 用途 |
+|--|--|
+| `LIMINAL_PLATFORM_GH_TOKEN` | 推送**本仓** |
+| `GH_TOKEN` | 推送 Potatoblock-Game（上线用） |
+
+推送到本仓：
+
+```bash
+python3 ~/.cursor/skills/potatoblock-deploy/scripts/push-liminal-platform.py \
+  --message "feat: …"
+```
+
+挂到主站（经 Game CD → MCS，**不**直接打面板）：
+
+```bash
+python3 ~/.cursor/skills/potatoblock-deploy/scripts/push-github.py \
+  --worktree …/potatogame/.deploy-worktree \
+  --package …/potatogame/potatoblock-avatar-lobby \
+  --message "deploy: vendor liminal"
+```
+
+Agent / 协作者约定见 Cursor skill **`liminal-platform-dev`**、**`potatoblock-deploy`**。
+
+---
+
+## 技术方向（摘要）
+
+| 层 | 选择 |
+|--|--|
+| 客户端 | 现有 JS **逐步**迁 TypeScript（Vite 分模块：net / 世界 / 战斗 / 物品栏 / UI） |
+| 服务端 | **继续** Python + FastAPI；房间 / 库存等权威逻辑可测、从 WS 处理里拆干净 |
+| 渲染 | 先保持 Canvas 2D；逻辑稳了再谈表现层大改 |
+| 不做 | 换 Godot/其它引擎；为月台另起一套生产后端语言或独立公网服 |
+
+**改功能顺序：** 协议与消息类型 → 服务端权威 → 画面 / 操作。
+
+细节见 [`docs/networking-plan.md`](docs/networking-plan.md)。
+
+---
 
 ## 目录结构
 
 ```
-potatoblock-avatar-lobby/
-├── run_local.py                  # 本地启动入口（仅本地）
+Liminal-Platform/
+├── run_local.py                 # 仅本地启动
 ├── requirements.txt
 ├── docs/
-│   ├── skin-format.md            # 皮套格式草案，格式定稿前以此为准
-│   ├── motion-references.md       # 程序化动作算法与开源参考
-│   └── networking-plan.md        # 联网权威模型、消息契约与扩展顺序
-├── var/uploads/skins/            # 用户上传的皮套（gitignore，不进版本库）
-├── game/                         # 独立小游戏项目目录（与 app/games 挂载包对应）
-│   └── Liminal_Platform/         # 阈限月台 — 从大厅入口 /liminal-platform 进入
+│   ├── networking-plan.md       # 联网权威、消息契约
+│   ├── skin-format.md           # 皮套格式
+│   └── motion-references.md     # 动作参考
+├── game/Liminal_Platform/       # 开发镜像（与挂载包同步）
+├── var/uploads/skins/           # 运行时上传（gitignore）
 └── app/
-    ├── main.py                   # 本地 FastAPI 入口（仅本地）
-    ├── routers/auth.py           # 本地鉴权 stub（仅本地，模拟远程接口）
-    ├── static/css/site.css       # 本地最小站点样式
+    ├── main.py / routers/       # 仅本地 stub（不上 Potatoblock-Game）
     └── games/
-        ├── __init__.py           # 游戏包注册器（与远程实例一致）
-        ├── avatar_lobby/         # ★ Avatar 虚拟形象大厅
-        │   ├── routes.py         # 页面 + 皮套上传/列出/取贴图接口
-        │   ├── skins.py          # 皮套文件管理（校验、落盘、读取）
-        │   ├── templates/index.html
-        │   └── static/
-        │       ├── css/avatar-lobby.css
-        │       └── js/
-        │           ├── avatar-lobby.js   # 2D 横版移动 + 皮套选择/渲染
-        │           ├── world-objects.js  # 大厅可交互入口（阈限月台等）
-        │           └── …
-        └── liminal_platform/     # 阈限月台挂载包（资源在 game/Liminal_Platform/）
-            ├── routes.py         # 加载 game/Liminal_Platform/routes.py
-            └── __init__.py
+        ├── avatar_lobby/        # 皮套大厅（vendor 进主站）
+        ├── liminal_platform/    # 阈限月台挂载包（vendor 进主站）
+        └── common/
 ```
 
-## 仅本地的文件（部署时不上传）
+`game/Liminal_Platform/` 与 `app/games/liminal_platform/` 应保持一致。改完一侧后：
 
-- `run_local.py`、`app/main.py`、`app/routers/auth.py`、`app/static/`
-- `var/`（本地上传数据）
+```bash
+rsync -a --delete --exclude '__pycache__' --exclude '*.pyc' \
+  game/Liminal_Platform/ app/games/liminal_platform/
+# 或反向：app → game，视你以哪一侧为编辑源
+```
 
-## 后续计划
+**仅本地、不进主站包：** `run_local.py`、`app/main.py`、`app/routers/`、`app/static/`、`var/`。
 
-- 皮套格式定稿（多贴图 / 动画帧，见 docs/skin-format.md 的扩展方向）
-- 房间 + WebSocket 多人同步（可复用 draw_guess 的 lobby 模式）
-- 更接近潜幽症的行动方式（蹲、冲刺等）
+---
+
+## 文档
+
+- [联网与权威模型](docs/networking-plan.md)
+- [皮套格式](docs/skin-format.md)
+- [动作参考](docs/motion-references.md)
+
+---
+
+## License / 素材
+
+代码归属 Potatoblock-Dev。第三方素材（如 Kenney Mobile Controls）遵循其各自许可证（多为 CC0）；使用时保留原作者说明即可。
