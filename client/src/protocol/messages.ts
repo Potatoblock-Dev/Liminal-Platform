@@ -35,6 +35,8 @@ export type ClientMessage =
       heldId: string | null;
       aimX?: number;
       aimY?: number;
+      /** 入座炮位：left/right；未入座省略。服务端保证同侧唯一。 */
+      turretId?: 'left' | 'right';
     }
   | {
       type: 'train';
@@ -59,6 +61,13 @@ export type ClientMessage =
       source?: string;
       handIndex?: number;
       weaponId?: string;
+      /** 炮塔座位；source=turret 时可选。 */
+      turretId?: 'left' | 'right';
+      /**
+       * 联机双联时附加枪口（与 x/y/dir* 同耗一发弹药）。
+       * 远端按数组逐发生成弹道；缺省仅用 x/y/dir*。
+       */
+      shots?: Array<{ x: number; y: number; dirX: number; dirY: number }>;
     }
   | ({
       type: 'inv';
@@ -105,6 +114,8 @@ export type SnapshotPlayer = {
   heldId?: string | null;
   aimX?: number;
   aimY?: number;
+  /** 当前占用的卫兵炮位；未入座省略。 */
+  turretId?: 'left' | 'right';
 };
 
 export type WorldTrain = {
@@ -198,6 +209,9 @@ export type ServerMessage =
       facing?: number;
       weaponId?: string;
       style?: string;
+      source?: string;
+      turretId?: 'left' | 'right';
+      shots?: Array<{ x: number; y: number; dirX: number; dirY: number }>;
       [key: string]: unknown;
     }
   | {

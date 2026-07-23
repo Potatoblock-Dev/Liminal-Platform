@@ -24,8 +24,15 @@ export type AvatarEntityApi = {
     ctx: CanvasRenderingContext2D,
     entity: Record<string, unknown>,
     view: unknown,
-    dpr: number
+    dpr: number,
+    options?: {
+      skipFrontArm?: boolean;
+      skipBackArm?: boolean;
+      skipNickname?: boolean;
+    }
   ) => void;
+  drawBackArm?: (ctx: CanvasRenderingContext2D, entity: Record<string, unknown>) => void;
+  drawFrontArm?: (ctx: CanvasRenderingContext2D, entity: Record<string, unknown>) => void;
 };
 
 export type LiminalNetworkApi = {
@@ -52,6 +59,7 @@ export type WebSocketSessionLike = EventTarget & {
     heldId?: string | null;
     aimX?: number | null;
     aimY?: number | null;
+    turretId?: 'left' | 'right' | null;
   }) => void;
   sendTrain: (state: { throttle?: number; brake?: number }) => void;
   sendFuelAdd: (amount?: number, itemId?: string) => void;
@@ -85,6 +93,14 @@ declare global {
     };
     LpGuardTurret?: {
       isManned?: () => boolean;
+      getMannedId?: () => 'left' | 'right' | null;
+      syncRemoteOperators?: (operators: Array<{
+        playerId: string;
+        turretId: 'left' | 'right';
+        aimX?: number | null;
+        aimY?: number | null;
+      }>) => void;
+      noteRemoteFire?: (detail: Record<string, unknown>) => void;
     };
     LpItemCatalog?: {
       getItem?: (id: string) => unknown;

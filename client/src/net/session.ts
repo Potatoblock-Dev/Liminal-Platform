@@ -12,6 +12,7 @@ type RemoteEntity = Record<string, unknown> & {
   _heldId?: string | null;
   _aimX?: number | null;
   _aimY?: number | null;
+  _turretId?: 'left' | 'right' | null;
   x?: number;
   y?: number;
   vx?: number;
@@ -79,10 +80,15 @@ export function installLiminalSession(): void {
       if (!id) return;
       if (event.detail?.temporary) {
         const remote = remotePlayers.get(id);
-        if (remote) remote._lpDisconnected = true;
+        if (remote) {
+          remote._lpDisconnected = true;
+          remote._turretId = null;
+        }
+        syncGuardTurretOperators();
         return;
       }
       remotePlayers.delete(id);
+      syncGuardTurretOperators();
     }) as EventListener);
     session.addEventListener('appearance', ((event: CustomEvent) => {
       const detail = event.detail || {};
@@ -92,6 +98,7 @@ export function installLiminalSession(): void {
     session.addEventListener('roomchange', () => {
       remotePlayers.clear();
       clockOffsetMs = null;
+      window.LpGuardTurret?.syncRemoteOperators?.([]);
     });
     session.addEventListener('fuelchanged', ((event: CustomEvent) => {
       const level = event.detail?.level;
@@ -100,15 +107,30 @@ export function installLiminalSession(): void {
     session.addEventListener('weaponfired', ((event: CustomEvent) => {
       const detail = event.detail || {};
       if (String(detail.playerId) === localUserId) return;
-      window.LpCombat?.spawnProjectile?.({
-        originX: detail.x,
-        originY: detail.y,
-        dirX: detail.dirX,
-        dirY: detail.dirY,
-        facing: detail.facing,
-        weaponId: detail.weaponId,
-        style: detail.style,
-      });
+      const shots = Array.isArray(detail.shots) && detail.shots.length > 0
+        ? detail.shots
+        : [
+            {
+              x: detail.x,
+              y: detail.y,
+              dirX: detail.dirX,
+              dirY: detail.dirY,
+            },
+          ];
+      for (const shot of shots) {
+        window.LpCombat?.spawnProjectile?.({
+          originX: shot.x,
+          originY: shot.y,
+          dirX: shot.dirX,
+          dirY: shot.dirY,
+          facing: detail.facing,
+          weaponId: detail.weaponId,
+          style: detail.style,
+        });
+      }
+      if (detail.source === 'turret' || detail.weaponId === 'guard_turret') {
+        window.LpGuardTurret?.noteRemoteFire?.(detail);
+      }
     }) as EventListener);
 
     window.addEventListener('lp:weapon-fired', ((event: CustomEvent) => {
@@ -134,7 +156,7 @@ export function installLiminalSession(): void {
     return remote;
   }
 
-  /** 把快照中的持枪/瞄准写到远端实体。 */
+  /** 把快照中的持枪/瞄准/炮位写到远端实体。 */
   function applyRemoteHold(remote: RemoteEntity, player: SnapshotPlayer): void {
     remote._heldId = player.heldId || null;
     if (player.aimX != null && player.aimY != null) {
@@ -144,6 +166,31 @@ export function installLiminalSession(): void {
       remote._aimX = null;
       remote._aimY = null;
     }
+    remote._turretId =
+      player.turretId === 'left' || player.turretId === 'right'
+        ? player.turretId
+        : null;
+  }
+
+  /** 把远端炮位占用与瞄准同步给卫兵炮塔模块。 */
+  function syncGuardTurretOperators(): void {
+    const operators: Array<{
+      playerId: string;
+      turretId: 'left' | 'right';
+      aimX?: number | null;
+      aimY?: number | null;
+    }> = [];
+    for (const [playerId, remote] of remotePlayers) {
+      if (remote._lpDisconnected) continue;
+      if (remote._turretId !== 'left' && remote._turretId !== 'right') continue;
+      operators.push({
+        playerId,
+        turretId: remote._turretId,
+        aimX: remote._aimX,
+        aimY: remote._aimY,
+      });
+    }
+    window.LpGuardTurret?.syncRemoteOperators?.(operators);
   }
 
   /** 应用世界快照：远端姿态 + 共享列车/燃料。 */
@@ -184,6 +231,8 @@ export function installLiminalSession(): void {
       if (!seen.has(id)) remotePlayers.delete(id);
     }
 
+    syncGuardTurretOperators();
+
     const world = payload.world;
     if (world?.train) window.LpTrainDrive?.applyAuthority?.(world.train);
     if (world?.fuel?.level != null) {
@@ -211,6 +260,7 @@ export function installLiminalSession(): void {
     poseSequence += 1;
     const held = window.LpCombat?.getHeldWeaponItem?.();
     const turretManned = Boolean(window.LpGuardTurret?.isManned?.());
+    const turretId = window.LpGuardTurret?.getMannedId?.();
     session.sendPose({
       sequence: poseSequence,
       x: frame.x,
@@ -224,6 +274,10 @@ export function installLiminalSession(): void {
       heldId: turretManned ? null : held?.id || null,
       aimX: frame.aimX,
       aimY: frame.aimY,
+      turretId:
+        turretManned && (turretId === 'left' || turretId === 'right')
+          ? turretId
+          : null,
     });
   }
 
@@ -291,7 +345,7 @@ export function installLiminalSession(): void {
     return { x: (remote.x ?? 0) + facing * 140, y: (remote.y ?? 0) - 56 };
   }
 
-  /** 绘制远端玩家（含持枪层）。 */
+  /** 绘制远端玩家（持枪层序与本机一致：身→后臂→枪→前臂）。 */
   function drawRemotes(
     ctx: CanvasRenderingContext2D,
     view: unknown,
@@ -304,8 +358,13 @@ export function installLiminalSession(): void {
       if (item && window.LpWeaponHold?.drawHeldWeapon) {
         const aim = remoteAimWorld(remote);
         Entity.applyAimArmPose?.(remote, aim);
-        Entity.drawAvatar(ctx, remote, view, dpr);
+        Entity.drawAvatar(ctx, remote, view, dpr, {
+          skipFrontArm: true,
+          skipBackArm: true,
+        });
+        Entity.drawBackArm?.(ctx, remote);
         window.LpWeaponHold.drawHeldWeapon(ctx, remote, aim, item);
+        Entity.drawFrontArm?.(ctx, remote);
       } else {
         Entity.drawAvatar(ctx, remote, view, dpr);
       }

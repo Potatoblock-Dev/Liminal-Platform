@@ -29,10 +29,10 @@
 | `type` | 说明 |
 |--|--|
 | `join` / `create` | 进房 / 建房（带 `protocolVersion`） |
-| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`） |
+| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`、`turretId`） |
 | `train` | 油门/刹车 |
 | `fuel_add` | 加燃料意图 |
-| `fire` | 开火 |
+| `fire` | 开火（炮塔可带 `turretId` / `shots[]` 双联枪口） |
 | `inv` | 库存意图（`op` 等扩展字段） |
 | `appearance` | 皮套 |
 | `chat` | 聊天（≤40 字） |
@@ -45,10 +45,10 @@
 | `type` | 说明 |
 |--|--|
 | `room_joined` / `room_error` / `room_removed` | 房间生命周期 |
-| `world_snapshot` | 玩家姿态 + `world.train` / `world.fuel` |
+| `world_snapshot` | 玩家姿态（含可选 `turretId`）+ `world.train` / `world.fuel` |
 | `player_join` / `player_leave` | `temporary` 表示断线宽限 |
 | `appearance` / `chat` | 外观与聊天广播 |
-| `fuel_changed` / `weapon_fired` | 燃料与远端弹道提示 |
+| `fuel_changed` / `weapon_fired` | 燃料与远端弹道（`shots[]` 时多枪口） |
 | `inv_snapshot` / `inv_room` | 库存权威快照 |
 | `pong` | 心跳应答 |
 
@@ -59,6 +59,17 @@
 | 4002 | 同 UID 被顶替（客户端停止自动重连） |
 | 4004 / 4005 / 4006 | 坏房码 / 满房 / 协议类错误（客户端回公共月台） |
 | 4401 | 未登录 |
+
+## 卫兵炮塔入座（可选字段）
+
+| 字段 | 方向 | 说明 |
+|--|--|--|
+| `pose.turretId` | C→S | `"left"` / `"right"`；离席省略。同侧仅一名在线玩家可占用（后到者声明被忽略） |
+| `SnapshotPlayer.turretId` | S→C | 快照回显占用 |
+| `fire.turretId` / `fire.shots` | C→S | 炮塔开火；`shots` 为双联第二枪口（与主枪口同耗 1 发箱弹） |
+| `weapon_fired.shots` | S→C | 远端按数组生成弹道与炮口反馈 |
+
+客户端规则：车厢上 **1 名** 入座操作员 → 该玩家控双塔；**2+** 入座 → 各控座位对应的一塔（左站左塔 / 右站右塔）。
 
 ## 前端构建
 

@@ -41,6 +41,7 @@ type PoseFrame = {
   heldId?: string | null;
   aimX?: number | null;
   aimY?: number | null;
+  turretId?: 'left' | 'right' | null;
 };
 
 type FireDetail = {
@@ -53,8 +54,10 @@ type FireDetail = {
   facing?: number;
   source?: string;
   turret?: boolean;
+  turretId?: 'left' | 'right';
   handIndex?: number;
   weaponId?: string;
+  shots?: Array<{ x: number; y: number; dirX: number; dirY: number }>;
 };
 
 export class WebSocketSession extends EventTarget {
@@ -115,6 +118,9 @@ export class WebSocketSession extends EventTarget {
       payload.aimX = frame.aimX;
       payload.aimY = frame.aimY;
     }
+    if (frame.turretId === 'left' || frame.turretId === 'right') {
+      payload.turretId = frame.turretId;
+    }
     this._send(payload);
   }
 
@@ -138,7 +144,7 @@ export class WebSocketSession extends EventTarget {
   }
 
   sendFire(detail: FireDetail): void {
-    this._send({
+    const payload: ClientMessage = {
       type: 'fire',
       protocolVersion: PROTOCOL_VERSION,
       x: detail.originX ?? detail.x ?? 0,
@@ -149,7 +155,19 @@ export class WebSocketSession extends EventTarget {
       source: detail.source || (detail.turret ? 'turret' : undefined),
       handIndex: detail.handIndex,
       weaponId: detail.weaponId,
-    });
+    };
+    if (detail.turretId === 'left' || detail.turretId === 'right') {
+      payload.turretId = detail.turretId;
+    }
+    if (Array.isArray(detail.shots) && detail.shots.length > 0) {
+      payload.shots = detail.shots.map((shot) => ({
+        x: shot.x,
+        y: shot.y,
+        dirX: shot.dirX,
+        dirY: shot.dirY,
+      }));
+    }
+    this._send(payload);
   }
 
   /** 发送库存意图（transfer / reload / crate 等）。 */
