@@ -739,9 +739,10 @@
     });
   }
 
+
   /**
-   * 开火静默入回收箱 1 枚 shell_casing（无抛壳画面）。
-   * 离线写入本地 recycleInv；联机跳过（由 handle_fire 权威写入）。
+   * 弹壳落入回收箱：离线写入本地 recycleInv；联机跳过（由 handle_fire 权威写入）。
+   * 无视觉抛壳；开火成功时由 tryFire 直接调用。
    */
   function depositCasing() {
     if (window.LpInventoryNet?.isActive?.()) return;
@@ -875,13 +876,8 @@
       spawnMuzzleFlash(fired);
     }
     if (muzzles.length === 0) return null;
-    /* 一发弹药 → 一枚弹壳；抛壳口取本机座位塔枪口（或首发）。 */
-    const casingFrom = primaryFired || muzzles[0];
-    spawnCasingFx(casingFrom.x, casingFrom.y, {
-      deposit: !online,
-      dirX: casingFrom.dirX,
-      dirY: casingFrom.dirY,
-    });
+    /* 一发弹药 → 回收箱 +1 shell_casing；无抛壳特效。联机由服务端权威写入。 */
+    if (!online) depositCasing();
     window.LpCombat?.syncCrosshairBloom?.();
 
     window.LpSfx?.play?.(SHOT_SFX, {
@@ -923,7 +919,7 @@
   }
 
   /**
-   * 远端炮塔开火反馈：后坐、火光与弹壳特效（弹道已由 session 生成；库存由服务端权威）。
+   * 远端炮塔开火反馈：后坐与炮口火光（弹道已由 session 生成；库存由服务端权威；无抛壳特效）。
    * 每发按枪口近邻踢后坐（双联 shots[] 时左右塔都会晃，不单靠 seat turretId）。
    */
   function noteRemoteFire(detail) {
@@ -938,7 +934,6 @@
           },
         ];
     const kicked = new Set();
-    let casingSpawned = false;
     for (const shot of shots) {
       if (shot?.x == null || shot?.y == null) continue;
       const dirX = Number(shot.dirX) || 0;
@@ -953,10 +948,6 @@
         dirY,
         angle,
       });
-      if (!casingSpawned) {
-        spawnCasingFx(sx, sy, { deposit: false, dirX, dirY });
-        casingSpawned = true;
-      }
       let best = null;
       let bestDist = Infinity;
       for (const pivot of ART_PIVOTS) {
@@ -985,7 +976,7 @@
     }
   }
 
-  /** 推进转向、冷却、后坐/散布回落、弹壳飞入与火光；并吸收远端瞄准。 */
+  /** 推进转向、冷却、后坐/散布回落与火光；并吸收远端瞄准。 */
   function tick(dt) {
     applyRemoteAims();
     let bloomChanged = false;
@@ -1013,22 +1004,6 @@
     }
     if (state.fireCooldown > 0) {
       state.fireCooldown = Math.max(0, state.fireCooldown - dt);
-    }
-    for (let i = state.casings.length - 1; i >= 0; i -= 1) {
-      const c = state.casings[i];
-      c.life -= dt;
-      c.vy += 520 * dt;
-      c.x += c.vx * dt;
-      c.y += c.vy * dt;
-      c.rot += (c.omega || 0) * dt;
-      /* 前半段自由抛壳；后半段吸入回收箱。 */
-      const pull = Math.max(0, 1 - c.life / (CASING_FX_LIFE * 0.55));
-      c.x += (c.targetX - c.x) * pull * 4.2 * dt;
-      c.y += (c.targetY - c.y) * pull * 4.2 * dt;
-      if (c.life <= 0) {
-        if (c.deposit) depositCasing();
-        state.casings.splice(i, 1);
-      }
     }
     for (let i = state.flashes.length - 1; i >= 0; i -= 1) {
       state.flashes[i].life -= dt;
@@ -1088,27 +1063,9 @@
     }
   }
 
-  /** 绘制铜壳抛壳特效（矩形弹壳 + 底缘；须经 drawFx 画在车厢贴图之上）。 */
-  function drawCasings(ctx) {
-    for (const c of state.casings) {
-      const fade = Math.min(1, Math.max(0.35, c.life / (CASING_FX_LIFE * 0.35)));
-      ctx.save();
-      ctx.translate(c.x, c.y);
-      ctx.rotate(c.rot || 0);
-      ctx.globalAlpha = fade;
-      ctx.fillStyle = '#d4a84a';
-      ctx.fillRect(-7, -2.4, 14, 4.8);
-      ctx.fillStyle = '#8a5a1a';
-      ctx.fillRect(4.2, -2.4, 3.2, 4.8);
-      ctx.fillStyle = '#f0d78a';
-      ctx.fillRect(-6.5, -1.2, 5, 1.2);
-      ctx.restore();
-    }
-  }
-
   /**
    * 在车厢贴图之下绘制炮管（白球/车身挡住炮尾）。
-   * 火光与弹壳须走 drawFx，否则会被车厢 PNG 盖住。
+   * 火光须走 drawFx，否则会被车厢 PNG 盖住。
    */
   function draw(ctx) {
     if (!guardCar()) return;
@@ -1123,14 +1080,13 @@
   }
 
   /**
-   * 在车厢贴图之上绘制炮口火光与抛壳（与车厢同套颠簸）。
+   * 在车厢贴图之上绘制炮口火光（与车厢同套颠簸；无抛壳特效）。
    * 开火原点仍用未颠簸世界坐标。
    */
   function drawFx(ctx) {
     if (!guardCar()) return;
     const paint = () => {
       drawFlashes(ctx);
-      drawCasings(ctx);
     };
     if (window.LpCarriageBob?.withGuardDraw) {
       window.LpCarriageBob.withGuardDraw(ctx, paint);
