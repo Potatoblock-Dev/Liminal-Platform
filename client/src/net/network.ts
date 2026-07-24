@@ -59,6 +59,8 @@ type PoseFrame = {
   droneVy?: number | null;
   droneAim?: number | null;
   dronePhase?: number | null;
+  /** train | platform；缺省 train。 */
+  scene?: 'train' | 'platform' | null;
 };
 
 type FireDetail = {
@@ -200,6 +202,9 @@ export class WebSocketSession extends EventTarget {
       ) {
         payload.dronePhase = frame.dronePhase;
       }
+    }
+    if (frame.scene === 'train' || frame.scene === 'platform') {
+      payload.scene = frame.scene;
     }
     this._send(payload);
   }

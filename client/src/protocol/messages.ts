@@ -56,6 +56,11 @@ export type ClientMessage =
       droneAim?: number;
       /** 0=hover 1=grab 2=fiddle 3=release。 */
       dronePhase?: number;
+      /**
+       * 所在场景：train=车厢走道；platform=月台。
+       * 缺省 train。发车锁：房内任一人为 platform 时服务端拒绝非零油门。
+       */
+      scene?: 'train' | 'platform';
     }
   | {
       type: 'train';
@@ -169,6 +174,8 @@ export type SnapshotPlayer = {
   droneVy?: number;
   droneAim?: number;
   dronePhase?: number;
+  /** 所在场景；缺省 train。 */
+  scene?: 'train' | 'platform';
 };
 
 export type WorldTrain = {

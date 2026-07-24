@@ -21,6 +21,8 @@ type RemoteEntity = Record<string, unknown> & {
   _lpDownedRemain?: number | null;
   _lpDownedDuration?: number | null;
   _lpDeathCause?: 'timer' | 'redeploy' | 'solo' | null;
+  /** 远端所在场景；缺省 train。 */
+  _lpScene?: 'train' | 'platform';
   x?: number;
   y?: number;
   vx?: number;
@@ -250,6 +252,8 @@ export function installLiminalSession(): void {
     } else if (remote._lpLifeState !== 'dead') {
       remote._lpDeathCause = null;
     }
+    const scene = player.scene;
+    remote._lpScene = scene === 'platform' ? 'platform' : 'train';
   }
 
   /** 把远端炮位占用与瞄准同步给卫兵炮塔模块。 */
@@ -379,10 +383,12 @@ export function installLiminalSession(): void {
     if (now - lastPoseSentAt < POSE_INTERVAL) return;
     lastPoseSentAt = now;
     poseSequence += 1;
-    const held = window.LpCombat?.getHeldWeaponItem?.();
+    const held =
+      window.LpCombat?.getHeldVisibleItem?.() ||
+      window.LpCombat?.getHeldWeaponItem?.();
     const turretManned = Boolean(window.LpGuardTurret?.isManned?.());
     const turretId = window.LpGuardTurret?.getMannedId?.();
-    // 控制台打开时不上报 heldId，远端也不画枪（本机库存槽不变）。
+    // 控制台打开时不上报 heldId，远端也不画手持物（本机库存槽不变）。
     const suppressHeld =
       turretManned ||
       Boolean(window.LpGame?.isUiOpen?.()) ||
@@ -436,6 +442,8 @@ export function installLiminalSession(): void {
       droneVy: drone?.droneVy ?? null,
       droneAim: drone?.droneAim ?? null,
       dronePhase: drone?.dronePhase ?? null,
+      scene:
+        window.LpPlatform?.getScene?.() === 'platform' ? 'platform' : 'train',
     });
   }
 
@@ -513,14 +521,18 @@ export function installLiminalSession(): void {
     return { x: (remote.x ?? 0) + facing * 140, y: (remote.y ?? 0) - 56 };
   }
 
-  /** 绘制远端玩家（持枪层序与本机一致；入座炮塔时不画手持枪；伴飞无人机另绘）。 */
+  /** 绘制远端玩家（手持层序与本机一致；入座炮塔时不画手持；伴飞无人机另绘）。 */
   function drawRemotes(
     ctx: CanvasRenderingContext2D,
     view: unknown,
     dpr: number
   ): void {
+    const localScene =
+      window.LpPlatform?.getScene?.() === 'platform' ? 'platform' : 'train';
     for (const remote of remotePlayers.values()) {
       if (remote._lpDisconnected) continue;
+      const remoteScene = remote._lpScene === 'platform' ? 'platform' : 'train';
+      if (remoteScene !== localScene) continue;
       const inTurret =
         remote._turretId === 'left' || remote._turretId === 'right';
       const heldId = inTurret ? null : remote._heldId;
@@ -528,17 +540,25 @@ export function installLiminalSession(): void {
         heldId &&
         remote._lpLifeState !== 'downed' &&
         remote._lpLifeState !== 'dead' &&
-        !window.LpItemCatalog?.isCompanionDrone?.(heldId)
+        window.LpItemCatalog?.showsHeldSprite?.(heldId)
           ? window.LpItemCatalog?.getItem?.(heldId)
           : null;
+      const holdingGun = Boolean(
+        item && window.LpItemCatalog?.isWeapon?.(item.id)
+      );
       if (item && window.LpWeaponHold?.drawHeldWeapon) {
         const aim = remoteAimWorld(remote);
-        window.LpWeaponHold.applyAimArmPose?.(remote, aim, item);
-        Entity.drawAvatar(ctx, remote, view, dpr, {
-          skipBackArm: true,
-        });
-        window.LpWeaponHold.drawHeldWeapon(ctx, remote, aim, item);
-        Entity.drawBackArm?.(ctx, remote);
+        if (holdingGun) {
+          window.LpWeaponHold.applyAimArmPose?.(remote, aim, item);
+          Entity.drawAvatar(ctx, remote, view, dpr, {
+            skipBackArm: true,
+          });
+          window.LpWeaponHold.drawHeldWeapon(ctx, remote, aim, item);
+          Entity.drawBackArm?.(ctx, remote);
+        } else {
+          Entity.drawAvatar(ctx, remote, view, dpr);
+          window.LpWeaponHold.drawHeldWeapon(ctx, remote, aim, item);
+        }
       } else {
         Entity.drawAvatar(ctx, remote, view, dpr);
       }

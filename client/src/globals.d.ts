@@ -84,6 +84,7 @@ export type WebSocketSessionLike = EventTarget & {
     droneVy?: number | null;
     droneAim?: number | null;
     dronePhase?: number | null;
+    scene?: 'train' | 'platform' | null;
   }) => void;
   sendTrain: (state: { throttle?: number; brake?: number }) => void;
   sendFuelAdd: (amount?: number, itemId?: string) => void;
@@ -119,6 +120,7 @@ declare global {
     LpCombat?: {
       spawnProjectile?: (detail: Record<string, unknown>) => void;
       getHeldWeaponItem?: () => { id: string } | null | undefined;
+      getHeldVisibleItem?: () => { id: string } | null | undefined;
       playFireSfxAt?: (weaponId: string | undefined, x: number, y: number) => void;
     };
     LpMedkit?: {
@@ -146,6 +148,34 @@ declare global {
       getMaxHp?: () => number;
       getLifeState?: () => string;
       isIncapacitated?: () => boolean;
+      refreshWalkBounds?: () => void;
+      setLocalX?: (x: number) => void;
+      teleportToCoupler?: (couplerIndex: number) => boolean;
+    };
+    /** 月台两场景：停靠 / 上下车 / 编组编辑 / 发车锁。 */
+    LpPlatform?: {
+      getScene?: () => 'train' | 'platform';
+      isAtPlatform?: () => boolean;
+      isLocalOnPlatform?: () => boolean;
+      anyPlayerOnPlatform?: () => boolean;
+      canDepart?: () => boolean;
+      getDepartBlockReason?: () => string | null;
+      findActive?: (local: { x: number; y?: number; onGround?: boolean }) => {
+        id: string;
+        actionLabel: string;
+        action: string;
+      } | null;
+      tryInteract?: (local: { x: number; y?: number; onGround?: boolean }) => boolean;
+      tick?: (dt: number) => void;
+      draw?: (ctx: CanvasRenderingContext2D) => void;
+      getPlatformWalkBounds?: () => {
+        left: number;
+        right: number;
+        floorY: number;
+      };
+      getRadarPlatformBlip?: () => { x: number; y: number; label?: string } | null;
+      getRadarTrackPolyline?: () => Array<{ x: number; y: number }>;
+      debugDock?: (on?: boolean) => void;
     };
     LpPressure?: {
       getPressure?: () => number;
@@ -168,8 +198,10 @@ declare global {
       allyDeathRadius?: () => number;
     };
     LpItemCatalog?: {
-      getItem?: (id: string) => unknown;
+      getItem?: (id: string) => { id: string } | null | undefined;
       isCompanionDrone?: (id: string) => boolean;
+      isWeapon?: (id: string) => boolean;
+      showsHeldSprite?: (id: string | { id?: string }) => boolean;
     };
     LpHummingbirdDrone?: {
       poseExtras?: () => {

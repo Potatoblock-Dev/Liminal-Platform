@@ -29,13 +29,13 @@
 | `type` | 说明 |
 |--|--|
 | `join` / `create` | 进房 / 建房（带 `protocolVersion`） |
-| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`、`turretId`、`pressure`、`hp`、`lifeState`、`downedRemain`、`deathCause`、`droneX`/`droneY`/`droneVx`/`droneVy`/`droneAim`/`dronePhase`） |
-| `train` | 油门/刹车 |
+| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`、`turretId`、`pressure`、`hp`、`lifeState`、`downedRemain`、`deathCause`、`droneX`/`droneY`/`droneVx`/`droneVy`/`droneAim`/`dronePhase`、`scene`） |
+| `train` | 油门/刹车（若房内有人 `scene=platform`，非零油门被服务端拒绝并清零） |
 | `fuel_add` | 加燃料意图 |
 | `fire` | 开火（炮塔可带 `turretId` / `shots[]` 双联枪口） |
 | `heal` | 医疗箱持续治疗意图（`handIndex` / `dt` / 可选 `targetId` / `aimX`/`aimY`）；目标濒死须改走 `revive` |
 | `revive` | 消耗整箱医箱复活濒死队友（`targetId` / 可选 `handIndex`） |
-| `inv` | 库存意图：`action`=`transfer` / `quick_transfer` / `consume` / `reload` / `crate` / `drop` / `rotate` / `sort`（`bag` 指 `player` 或 `storage`） |
+| `inv` | 库存意图：`action`=`transfer` / `quick_transfer` / `consume` / `reload` / `crate` / `drop` / `rotate` / `sort` / `set_ammo`（`bag` 指 `player` / `hands` / `equip` 或房间袋；`set_ammo` 仅个人袋 + 带 `maxAmmo` 的堆叠，如灭火器） |
 | `appearance` | 皮套 |
 | `chat` | 聊天（≤40 字） |
 | `ping` | 心跳（`t`） |
@@ -99,6 +99,18 @@
 | `SnapshotPlayer.drone*` | S→C | 服务端原样回显广播；本机可软矫正，远端平滑追目标 |
 
 服务端**不**模拟无人机物理或开火；仅存储并转发主人上报的位姿。弹道仍走既有本地先行 / `weapon_fired`（若后续接入）。
+
+## 月台场景（可选字段）
+
+列车与月台为**两套场景**（连接处 F 切换），不是同一走道连续条带。
+
+| 字段 | 方向 | 说明 |
+|--|--|--|
+| `pose.scene` | C→S | `"train"` / `"platform"`；缺省按 `"train"`。服务端写入快照 |
+| `SnapshotPlayer.scene` | S→C | 回显；客户端只绘制与本机同场景的远端 |
+| 发车锁 | S | `handle_train`：任一在线玩家 `scene=platform` 时拒绝非零 `throttle` 并强制 `throttle=0` |
+
+下月台时客户端记住**连接处索引**（coupler index）；回车时在同连接处重生。停靠态 `atPlatform` 由客户端路线进度写入 `LpAutoSensors.setPlatformStub`（首通）。
 
 ## 前端构建
 
