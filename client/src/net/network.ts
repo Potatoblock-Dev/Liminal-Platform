@@ -58,6 +58,8 @@ type FireDetail = {
   handIndex?: number;
   weaponId?: string;
   shots?: Array<{ x: number; y: number; dirX: number; dirY: number }>;
+  /** 武装车厢弹种 ap | t。 */
+  ammoType?: string;
 };
 
 export class WebSocketSession extends EventTarget {
@@ -167,6 +169,10 @@ export class WebSocketSession extends EventTarget {
         dirY: shot.dirY,
       }));
     }
+    const ammo = String(detail.ammoType || '').trim().toLowerCase();
+    if (ammo === 'ap' || ammo === 't') {
+      payload.ammoType = ammo;
+    }
     this._send(payload);
   }
 
@@ -229,17 +235,22 @@ export class WebSocketSession extends EventTarget {
     this.joinRoom(PUBLIC_ROOM_ID);
   }
 
+  /** 打开（或替换）WebSocket；替换时先摘掉旧 socket，避免 onclose 误排重连。 */
   _open(): void {
     this._clearTimers();
     this.manualClose = false;
-    if (this.ws) {
+    const prev = this.ws;
+    this.ws = null;
+    if (prev) {
       try {
-        this.ws.close();
+        prev.close();
       } catch {
         /* ignore */
       }
     }
-    this._emit('connectionchange', { status: 'connecting' });
+    // 自动重连统一用 reconnecting，避免 UI 在 connecting/offline 间闪烁。
+    const status = this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting';
+    this._emit('connectionchange', { status });
     const socket = new WebSocket(wsUrl());
     this.ws = socket;
 

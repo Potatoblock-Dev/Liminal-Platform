@@ -66,8 +66,8 @@
 |--|--|--|
 | `pose.turretId` | C→S | `"left"` / `"right"`；离席省略。同侧仅一名在线玩家可占用（后到者声明被忽略） |
 | `SnapshotPlayer.turretId` | S→C | 快照回显占用 |
-| `fire.turretId` / `fire.shots` | C→S | 炮塔开火；`shots` 为双联第二枪口（与主枪口同耗 1 发箱弹） |
-| `weapon_fired.shots` | S→C | 远端按数组生成弹道与炮口反馈 |
+| `fire.turretId` / `fire.shots` / `fire.ammoType` | C→S | 炮塔开火；`shots` 为双联第二枪口（与主枪口同耗 1 发箱弹）；`ammoType` 为 `ap` / `t`（外观透传） |
+| `weapon_fired.shots` / `weapon_fired.ammoType` | S→C | 远端按数组生成弹道与炮口反馈；弹种同步曳光/穿甲外观 |
 
 客户端规则：车厢上 **1 名** 入座操作员 → 该玩家控双塔；**2+** 入座 → 各控座位对应的一塔（左站左塔 / 右站右塔）。
 

@@ -126,6 +126,7 @@ export function installLiminalSession(): void {
           facing: detail.facing,
           weaponId: detail.weaponId,
           style: detail.style,
+          ammoType: detail.ammoType,
         });
       }
       if (detail.source === 'turret' || detail.weaponId === 'guard_turret') {

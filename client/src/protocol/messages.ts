@@ -68,6 +68,8 @@ export type ClientMessage =
        * 远端按数组逐发生成弹道；缺省仅用 x/y/dir*。
        */
       shots?: Array<{ x: number; y: number; dirX: number; dirY: number }>;
+      /** 武装车厢弹种：ap | t（仅外观/后续玩法；服务端透传）。 */
+      ammoType?: string;
     }
   | ({
       type: 'inv';
@@ -212,6 +214,8 @@ export type ServerMessage =
       source?: string;
       turretId?: 'left' | 'right';
       shots?: Array<{ x: number; y: number; dirX: number; dirY: number }>;
+      /** 武装弹种 ap | t；远端弹道外观。 */
+      ammoType?: string;
       [key: string]: unknown;
     }
   | {
