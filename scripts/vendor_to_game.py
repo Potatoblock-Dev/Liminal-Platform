@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import base64
 import os
 import shutil
 import subprocess
@@ -29,16 +28,8 @@ from potatoblock_vendor import apply_mappings, load_config, run_prepare  # noqa:
 
 
 def _run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> None:
-    """Run a command; redact token URLs / Authorization headers in logs."""
-    shown = []
-    for part in cmd:
-        if part.startswith("https://x-access-token:"):
-            shown.append("https://x-access-token:***@github.com/…")
-        elif "extraheader=AUTHORIZATION:" in part or "extraHeader=Authorization:" in part:
-            shown.append(part.split("=", 1)[0] + "=AUTHORIZATION: ***")
-        else:
-            shown.append(part)
-    print("+", " ".join(shown), flush=True)
+    """Run a command (no secrets in argv)."""
+    print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=cwd, check=True, env=env)
 
 
@@ -47,20 +38,41 @@ def _git_output(cmd: list[str], cwd: Path) -> str:
     return subprocess.check_output(cmd, cwd=cwd, text=True).strip()
 
 
-def _git_auth_args(token: str) -> list[str]:
-    """Auth like actions/checkout; clear job GITHUB_TOKEN extraheader first.
+def _git_env(token: str, work: Path) -> dict[str, str]:
+    """Build git env that authenticates without putting the PAT on argv.
 
-    Actions injects http.https://github.com/.extraheader with the workflow
-    GITHUB_TOKEN (SoT repo only). That header wins over URL credentials and
-    breaks push to Potatoblock-Game. Replace it with our PAT Basic auth.
+    GitHub Actions masks secrets in command lines and can corrupt
+    `git -c http...AUTHORIZATION: basic <pat>` into a broken command.
+    ASKPASS keeps the token in a 0600 file instead.
     """
-    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-    return [
-        "-c",
-        "credential.helper=",
-        "-c",
-        f"http.https://github.com/.extraheader=AUTHORIZATION: basic {basic}",
-    ]
+    token_file = work / ".pat"
+    token_file.write_text(token, encoding="utf-8")
+    token_file.chmod(0o600)
+
+    askpass = work / "askpass.sh"
+    # Paths are under mkdtemp; no secret in this script body.
+    askpass.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        "  Username*) echo x-access-token ;;\n"
+        f'  *) cat "{token_file}" ;;\n'
+        "esac\n",
+        encoding="utf-8",
+    )
+    askpass.chmod(0o700)
+
+    env = os.environ.copy()
+    env["GIT_ASKPASS"] = str(askpass)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    # Prefer our PAT; drop job / other tokens that confuse HTTPS to github.com.
+    for k in (
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "LIMINAL_PLATFORM_GH_TOKEN",
+        "POTATOBLOCK_GAME_TOKEN",
+    ):
+        env.pop(k, None)
+    return env
 
 
 def main() -> None:
@@ -107,18 +119,28 @@ def main() -> None:
             print(f"dry-run ok → {worktree} (not pushed)")
             return
 
-        # Use clean HTTPS remote + header auth (not token-in-URL) so Actions
-        # GITHUB_TOKEN extraheader cannot steal the push.
         remote_url = f"https://github.com/{repo}.git"
         worktree = work / "game"
-        auth = _git_auth_args(token)
-        env = os.environ.copy()
-        env["GIT_TERMINAL_PROMPT"] = "0"
-        # Avoid Actions / local helpers picking the wrong token.
-        for k in ("GITHUB_TOKEN", "GH_TOKEN", "LIMINAL_PLATFORM_GH_TOKEN"):
-            env.pop(k, None)
+        env = _git_env(token, work)
+        # Clear Actions-injected GITHUB_TOKEN header so ASKPASS is used.
+        auth_clear = [
+            "-c",
+            "credential.helper=",
+            "-c",
+            "http.https://github.com/.extraheader=",
+        ]
         _run(
-            ["git", *auth, "clone", "--depth", "1", "--branch", branch, remote_url, str(worktree)],
+            [
+                "git",
+                *auth_clear,
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                branch,
+                remote_url,
+                str(worktree),
+            ],
             env=env,
         )
         apply_mappings(package_root, worktree, cfg)
@@ -130,21 +152,10 @@ def main() -> None:
 
         _run(["git", "config", "user.name", "potatoblock-vendor"], cwd=worktree)
         _run(["git", "config", "user.email", "vendor@users.noreply.github.com"], cwd=worktree)
-        # Persist auth on this worktree only (survives -c quirks on push).
-        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-        _run(
-            [
-                "git",
-                "config",
-                "http.https://github.com/.extraheader",
-                f"AUTHORIZATION: basic {basic}",
-            ],
-            cwd=worktree,
-        )
         _run(["git", "add", "-A"], cwd=worktree)
         _run(["git", "commit", "-m", message], cwd=worktree)
         _run(
-            ["git", *auth, "push", "origin", f"HEAD:{branch}"],
+            ["git", *auth_clear, "push", "origin", f"HEAD:{branch}"],
             cwd=worktree,
             env=env,
         )
