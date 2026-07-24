@@ -37,6 +37,16 @@ export type ClientMessage =
       aimY?: number;
       /** 入座炮位：left/right；未入座省略。服务端保证同侧唯一。 */
       turretId?: 'left' | 'right';
+      /** 本机压力 0…200（HUD 透传，非权威玩法结算）。 */
+      pressure?: number;
+      /** 本机生命（HUD 透传；小怪伤害仍本地）。 */
+      hp?: number;
+      /** 生命态：alive | downed | dead（联机濒死/死亡同步）。 */
+      lifeState?: 'alive' | 'downed' | 'dead';
+      /** 濒死剩余秒数（仅 lifeState=downed）。 */
+      downedRemain?: number | null;
+      /** 最终死亡原因：timer | redeploy | solo（仅 lifeState=dead）。 */
+      deathCause?: 'timer' | 'redeploy' | 'solo' | null;
     }
   | {
       type: 'train';
@@ -70,6 +80,23 @@ export type ClientMessage =
       shots?: Array<{ x: number; y: number; dirX: number; dirY: number }>;
       /** 武装车厢弹种：ap | t（仅外观/后续玩法；服务端透传）。 */
       ammoType?: string;
+    }
+  | {
+      type: 'heal';
+      protocolVersion: typeof PROTOCOL_VERSION;
+      handIndex?: number;
+      dt: number;
+      /** 队友 userId；缺省/空=自疗。 */
+      targetId?: string | null;
+      aimX?: number;
+      aimY?: number;
+    }
+  | {
+      /** 消耗整箱医箱复活濒死队友。 */
+      type: 'revive';
+      protocolVersion: typeof PROTOCOL_VERSION;
+      targetId: string;
+      handIndex?: number;
     }
   | ({
       type: 'inv';
@@ -118,6 +145,14 @@ export type SnapshotPlayer = {
   aimY?: number;
   /** 当前占用的卫兵炮位；未入座省略。 */
   turretId?: 'left' | 'right';
+  /** 客户端上报的压力（HUD）。 */
+  pressure?: number;
+  /** 客户端上报的生命（HUD）。 */
+  hp?: number;
+  /** 生命态透传。 */
+  lifeState?: 'alive' | 'downed' | 'dead';
+  downedRemain?: number | null;
+  deathCause?: 'timer' | 'redeploy' | 'solo' | null;
 };
 
 export type WorldTrain = {
@@ -217,6 +252,22 @@ export type ServerMessage =
       /** 武装弹种 ap | t；远端弹道外观。 */
       ammoType?: string;
       [key: string]: unknown;
+    }
+  | {
+      type: 'player_healed';
+      protocolVersion: number;
+      roomId?: string;
+      by: string;
+      targetId: string;
+      amount: number;
+      ally?: boolean;
+    }
+  | {
+      type: 'player_revived';
+      protocolVersion: number;
+      roomId?: string;
+      by: string;
+      targetId: string;
     }
   | {
       type: 'inv_snapshot';

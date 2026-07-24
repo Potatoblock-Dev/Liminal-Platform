@@ -1,0 +1,72 @@
+{
+  "name": "liminal-platform",
+  "description": "SoT → Potatoblock-Game vendor map (MCS /app). Extend by adding mappings; do not hardcode package names in CD control flow.",
+  "target": {
+    "repository": "Potatoblock-Dev/Potatoblock-Game",
+    "branch": "main"
+  },
+  "prepare": [
+    "scripts/prepare_liminal_release.py"
+  ],
+  "mappings": [
+    {
+      "from": "app/games/liminal_platform",
+      "to": "games/liminal_platform",
+      "prune": true
+    },
+    {
+      "from": "app/games/avatar_lobby",
+      "to": "games/avatar_lobby",
+      "prune": true
+    },
+    {
+      "from": "app/games/common",
+      "to": "games/common",
+      "prune": false,
+      "optional": true
+    },
+    {
+      "from": "app/games/__init__.py",
+      "to": "games/__init__.py",
+      "optional": true
+    }
+  ],
+  "exclude_dir_names": [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    "node_modules",
+    ".work",
+    "var",
+    "uploads"
+  ],
+  "exclude_name_suffixes": [
+    ".pyc",
+    ".pyo",
+    ".PROCESSING.txt"
+  ],
+  "exclude_file_names": [
+    ".DS_Store"
+  ],
+  "commit_message_prefix": "deploy: vendor liminal",
+  "runtime": {
+    "mcs_upload_dir": "/app",
+    "note": "Game CD (deploy.py) zips repo root → MCSM_UPLOAD_DIR (default /app). Static mounts come from each game_info.static_url.",
+    "routes": {
+      "liminal_platform": {
+        "page": "/liminal-platform",
+        "ws": "/liminal-platform/ws",
+        "static_url": "/static/games/liminal-platform",
+        "server_dir": "/app/games/liminal_platform"
+      },
+      "avatar_lobby": {
+        "page": "/avatar-lobby",
+        "ws": "/avatar-lobby/ws",
+        "static_url": "/static/games/avatar-lobby",
+        "server_dir": "/app/games/avatar_lobby"
+      }
+    }
+  }
+}

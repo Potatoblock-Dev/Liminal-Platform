@@ -13,6 +13,14 @@ type RemoteEntity = Record<string, unknown> & {
   _aimX?: number | null;
   _aimY?: number | null;
   _turretId?: 'left' | 'right' | null;
+  _lpHp?: number | null;
+  _lpMaxHp?: number;
+  _lpPressure?: number | null;
+  _lpPressureMax?: number;
+  _lpLifeState?: 'alive' | 'downed' | 'dead';
+  _lpDownedRemain?: number | null;
+  _lpDownedDuration?: number | null;
+  _lpDeathCause?: 'timer' | 'redeploy' | 'solo' | null;
   x?: number;
   y?: number;
   vx?: number;
@@ -24,6 +32,10 @@ type RemoteEntity = Record<string, unknown> & {
   headLookVelocity?: number;
   moveDirection?: number;
   nickname?: string;
+  kneel?: number;
+  lean?: number;
+  leanVelocity?: number;
+  squash?: number;
 };
 
 export function installLiminalSession(): void {
@@ -57,12 +69,16 @@ export function installLiminalSession(): void {
     return serverTimeMs + clockOffsetMs;
   }
 
-  /** 创建并连接会话。 */
+  /** 创建会话；生产自动连线，本机开发默认断线（仍可手动加入/创建）。 */
   function start(identity: PlayerIdentity): void {
     localUserId = String(identity.userId || '');
     session = Net.createSession();
     window.LiminalMultiplayerUi?.bindMultiplayerUi?.(session);
-    session.connect(identity);
+    if (Net.isLocalDevHost()) {
+      session.prepareOffline(identity);
+    } else {
+      session.connect(identity);
+    }
     window.LpInventoryNet?.bindSession?.(session);
     window.addEventListener('beforeunload', () => session?.disconnect());
 
@@ -131,12 +147,42 @@ export function installLiminalSession(): void {
       }
       if (detail.source === 'turret' || detail.weaponId === 'guard_turret') {
         window.LpGuardTurret?.noteRemoteFire?.(detail);
+      } else {
+        const primary = shots[0];
+        if (primary?.x != null && primary?.y != null) {
+          window.LpCombat?.playFireSfxAt?.(
+            detail.weaponId,
+            Number(primary.x),
+            Number(primary.y)
+          );
+        }
       }
+    }) as EventListener);
+    session.addEventListener('playerhealed', ((event: CustomEvent) => {
+      window.LpMedkit?.applyHealed?.(event.detail || {});
+    }) as EventListener);
+    session.addEventListener('playerrevived', ((event: CustomEvent) => {
+      window.dispatchEvent(
+        new CustomEvent('lp:player-revived', { detail: event.detail || {} })
+      );
     }) as EventListener);
 
     window.addEventListener('lp:weapon-fired', ((event: CustomEvent) => {
       if (!session?.connected) return;
       session.sendFire(event.detail || {});
+    }) as EventListener);
+    window.addEventListener('lp:heal', ((event: CustomEvent) => {
+      if (!session?.connected) return;
+      session.sendHeal(event.detail || {});
+    }) as EventListener);
+    window.addEventListener('lp:revive', ((event: CustomEvent) => {
+      if (!session?.connected) return;
+      const d = event.detail || {};
+      if (!d.targetId) return;
+      session.sendRevive({
+        targetId: String(d.targetId),
+        handIndex: d.handIndex,
+      });
     }) as EventListener);
   }
 
@@ -157,7 +203,7 @@ export function installLiminalSession(): void {
     return remote;
   }
 
-  /** 把快照中的持枪/瞄准/炮位写到远端实体。 */
+  /** 把快照中的持枪/瞄准/炮位/生命压力/生命态写到远端实体。 */
   function applyRemoteHold(remote: RemoteEntity, player: SnapshotPlayer): void {
     remote._heldId = player.heldId || null;
     if (player.aimX != null && player.aimY != null) {
@@ -171,6 +217,36 @@ export function installLiminalSession(): void {
       player.turretId === 'left' || player.turretId === 'right'
         ? player.turretId
         : null;
+    if (player.hp != null && Number.isFinite(Number(player.hp))) {
+      remote._lpHp = Math.max(0, Math.min(100, Number(player.hp)));
+      remote._lpMaxHp = 100;
+    }
+    if (player.pressure != null && Number.isFinite(Number(player.pressure))) {
+      remote._lpPressure = Math.max(0, Math.min(200, Number(player.pressure)));
+      remote._lpPressureMax = 200;
+    }
+    const life = player.lifeState;
+    if (life === 'alive' || life === 'downed' || life === 'dead') {
+      remote._lpLifeState = life;
+    } else if (remote._lpHp != null && remote._lpHp <= 0) {
+      remote._lpLifeState = remote._lpLifeState || 'dead';
+    } else {
+      remote._lpLifeState = remote._lpLifeState || 'alive';
+    }
+    if (player.downedRemain != null && Number.isFinite(Number(player.downedRemain))) {
+      remote._lpDownedRemain = Math.max(0, Number(player.downedRemain));
+    } else if (remote._lpLifeState !== 'downed') {
+      remote._lpDownedRemain = null;
+    }
+    if (
+      player.deathCause === 'timer' ||
+      player.deathCause === 'redeploy' ||
+      player.deathCause === 'solo'
+    ) {
+      remote._lpDeathCause = player.deathCause;
+    } else if (remote._lpLifeState !== 'dead') {
+      remote._lpDeathCause = null;
+    }
   }
 
   /** 把远端炮位占用与瞄准同步给卫兵炮塔模块。 */
@@ -253,6 +329,9 @@ export function installLiminalSession(): void {
     headLook?: number;
     aimX?: number | null;
     aimY?: number | null;
+    lifeState?: string | null;
+    downedRemain?: number | null;
+    deathCause?: string | null;
   }): void {
     if (!session?.connected) return;
     const now = performance.now();
@@ -264,7 +343,14 @@ export function installLiminalSession(): void {
     const turretId = window.LpGuardTurret?.getMannedId?.();
     // 控制台打开时不上报 heldId，远端也不画枪（本机库存槽不变）。
     const suppressHeld =
-      turretManned || Boolean(window.LpGame?.isUiOpen?.());
+      turretManned ||
+      Boolean(window.LpGame?.isUiOpen?.()) ||
+      Boolean(window.LpPlayerDeath?.isIncapacitated?.());
+    const pressure = window.LpPressure?.getPressure?.();
+    const hp = window.LpGame?.getHp?.();
+    const extras = window.LpPlayerDeath?.poseExtras?.() || {};
+    const lifeState =
+      frame.lifeState || extras.lifeState || window.LpGame?.getLifeState?.() || 'alive';
     session.sendPose({
       sequence: poseSequence,
       x: frame.x,
@@ -282,6 +368,26 @@ export function installLiminalSession(): void {
         turretManned && (turretId === 'left' || turretId === 'right')
           ? turretId
           : null,
+      pressure: pressure != null ? pressure : null,
+      hp: hp != null ? hp : null,
+      lifeState:
+        lifeState === 'downed' || lifeState === 'dead' ? lifeState : 'alive',
+      downedRemain:
+        frame.downedRemain != null
+          ? frame.downedRemain
+          : extras.downedRemain != null
+            ? extras.downedRemain
+            : null,
+      deathCause:
+        frame.deathCause === 'timer' ||
+        frame.deathCause === 'redeploy' ||
+        frame.deathCause === 'solo'
+          ? frame.deathCause
+          : extras.deathCause === 'timer' ||
+              extras.deathCause === 'redeploy' ||
+              extras.deathCause === 'solo'
+            ? extras.deathCause
+            : null,
     });
   }
 
@@ -337,6 +443,15 @@ export function installLiminalSession(): void {
       remote.moveDirection = Math.sign(remote.vx || 0) || 0;
       remote.nickname = (sample.nickname as string) || remote.nickname;
       Entity.updateEntityMotion(remote, dt);
+      if (remote._lpLifeState === 'downed' || remote._lpLifeState === 'dead') {
+        window.LpPlayerDeath?.applyDownedPose?.(remote, dt);
+        if (remote._lpLifeState === 'downed' && remote._lpDownedRemain != null) {
+          remote._lpDownedRemain = Math.max(
+            0,
+            Number(remote._lpDownedRemain) - dt
+          );
+        }
+      }
     }
   }
 
@@ -360,7 +475,10 @@ export function installLiminalSession(): void {
       const inTurret =
         remote._turretId === 'left' || remote._turretId === 'right';
       const heldId = inTurret ? null : remote._heldId;
-      const item = heldId ? window.LpItemCatalog?.getItem?.(heldId) : null;
+      const item =
+        heldId && remote._lpLifeState !== 'downed' && remote._lpLifeState !== 'dead'
+          ? window.LpItemCatalog?.getItem?.(heldId)
+          : null;
       if (item && window.LpWeaponHold?.drawHeldWeapon) {
         const aim = remoteAimWorld(remote);
         window.LpWeaponHold.applyAimArmPose?.(remote, aim, item);

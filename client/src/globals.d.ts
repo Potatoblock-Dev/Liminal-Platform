@@ -40,12 +40,25 @@ export type LiminalNetworkApi = {
   POSE_RATE_HZ: number;
   PUBLIC_ROOM_ID: string;
   createSession: () => WebSocketSessionLike;
+  /** 本机开发入口（localhost / 环回）时为 true。 */
+  isLocalDevHost: () => boolean;
 };
 
 export type WebSocketSessionLike = EventTarget & {
   connected: boolean;
   connect: (identity: PlayerIdentity) => void;
+  /** 本地默认断线：只存身份，不打开 WebSocket。 */
+  prepareOffline: (identity: PlayerIdentity) => void;
   disconnect: () => void;
+  createRoom?: () => void;
+  joinRoom?: (roomId?: string) => void;
+  returnPublic?: () => void;
+  manualClose?: boolean;
+  mode?: string;
+  roomId?: string;
+  isPublic?: boolean;
+  playerCount?: number;
+  maxPlayers?: number;
   sendPose: (frame: {
     sequence: number;
     x: number;
@@ -60,10 +73,20 @@ export type WebSocketSessionLike = EventTarget & {
     aimX?: number | null;
     aimY?: number | null;
     turretId?: 'left' | 'right' | null;
+    pressure?: number | null;
+    hp?: number | null;
   }) => void;
   sendTrain: (state: { throttle?: number; brake?: number }) => void;
   sendFuelAdd: (amount?: number, itemId?: string) => void;
   sendFire: (detail: Record<string, unknown> & { dirX?: number; dirY?: number }) => void;
+  sendHeal: (detail: {
+    targetId?: string | null;
+    handIndex?: number;
+    dt?: number;
+    aimX?: number;
+    aimY?: number;
+  }) => void;
+  sendRevive: (detail: { targetId: string; handIndex?: number }) => void;
   sendInv: (detail: Record<string, unknown>) => void;
   setAppearance: (appearance: { skinId?: string | null }) => void;
 };
@@ -105,6 +128,31 @@ declare global {
     LpGame?: {
       isUiOpen?: () => boolean;
       getLocalAvatar?: () => Record<string, unknown>;
+      getLocalX?: () => number;
+      getHp?: () => number;
+      getMaxHp?: () => number;
+      getLifeState?: () => string;
+      isIncapacitated?: () => boolean;
+    };
+    LpPressure?: {
+      getPressure?: () => number;
+      getEffectiveMax?: () => number;
+      setPressure?: (v: number, localX?: number) => void;
+      noteAllyDeathNearby?: (localX?: number) => void;
+      noteAllyRedeployNearby?: (localX?: number) => void;
+    };
+    LpPlayerDeath?: {
+      isIncapacitated?: () => boolean;
+      isDowned?: () => boolean;
+      isDead?: () => boolean;
+      getLifeState?: () => string;
+      poseExtras?: () => {
+        lifeState?: string;
+        downedRemain?: number | null;
+        deathCause?: string | null;
+      };
+      applyDownedPose?: (entity: Record<string, unknown>, dt?: number) => void;
+      allyDeathRadius?: () => number;
     };
     LpItemCatalog?: {
       getItem?: (id: string) => unknown;

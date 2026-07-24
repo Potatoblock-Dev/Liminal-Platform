@@ -29,10 +29,12 @@
 | `type` | 说明 |
 |--|--|
 | `join` / `create` | 进房 / 建房（带 `protocolVersion`） |
-| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`、`turretId`） |
+| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`、`turretId`、`pressure`、`hp`、`lifeState`、`downedRemain`、`deathCause`） |
 | `train` | 油门/刹车 |
 | `fuel_add` | 加燃料意图 |
 | `fire` | 开火（炮塔可带 `turretId` / `shots[]` 双联枪口） |
+| `heal` | 医疗箱持续治疗意图（`handIndex` / `dt` / 可选 `targetId` / `aimX`/`aimY`）；目标濒死须改走 `revive` |
+| `revive` | 消耗整箱医箱复活濒死队友（`targetId` / 可选 `handIndex`） |
 | `inv` | 库存意图：`action`=`transfer` / `quick_transfer` / `consume` / `reload` / `crate` / `drop` / `rotate` / `sort`（`bag` 指 `player` 或 `storage`） |
 | `appearance` | 皮套 |
 | `chat` | 聊天（≤40 字） |
@@ -49,6 +51,8 @@
 | `player_join` / `player_leave` | `temporary` 表示断线宽限 |
 | `appearance` / `chat` | 外观与聊天广播 |
 | `fuel_changed` / `weapon_fired` | 燃料与远端弹道（`shots[]` 时多枪口） |
+| `player_healed` | 医疗箱治疗结果（`targetId` / `amount` / `by`）；目标客户端本地回血 |
+| `player_revived` | 医箱复活成功（`by` / `targetId`）；目标回血至 20% max、压力按濒死基数+80；救人者减压 |
 | `inv_snapshot` / `inv_room` | 库存权威快照 |
 | `pong` | 心跳应答 |
 
@@ -70,6 +74,19 @@
 | `weapon_fired.shots` / `weapon_fired.ammoType` | S→C | 远端按数组生成弹道与炮口反馈；弹种同步曳光/穿甲外观 |
 
 客户端规则：车厢上 **1 名** 入座操作员 → 该玩家控双塔；**2+** 入座 → 各控座位对应的一塔（左站左塔 / 右站右塔）。
+
+## 生命 / 压力 HUD 透传（可选字段）
+
+| 字段 | 方向 | 说明 |
+|--|--|--|
+| `pose.pressure` | C→S | 本机压力 0…200；服务端钳制后写入快照。**本地权威**玩法，仅供队友 HUD |
+| `pose.hp` | C→S | 本机生命 0…100；同样为 HUD 透传（小怪伤害仍本地，非权威 PvE） |
+| `pose.lifeState` | C→S | `alive` / `downed` / `dead`；濒死与最终死亡同步 |
+| `pose.downedRemain` | C→S | 濒死剩余秒数（仅 downed） |
+| `pose.deathCause` | C→S | `timer` / `redeploy` / `solo`（仅 dead；附近加压区分 +100 / +20） |
+| `SnapshotPlayer.*` | S→C | 快照回显；客户端写入远端 `_lpHp` / `_lpLifeState` 等 |
+
+压力 / 濒死细节见 `app/games/liminal_platform/docs/pressure.md`。
 
 ## 前端构建
 

@@ -28,6 +28,12 @@ function roomFromUrl(): string {
   return room && room.trim() ? room.trim().toUpperCase() : PUBLIC_ROOM_ID;
 }
 
+/** 是否本机开发入口（localhost / 环回），用于本地默认断线等 UX。 */
+export function isLocalDevHost(): boolean {
+  const host = String(location.hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+}
+
 type PoseFrame = {
   sequence: number;
   x: number;
@@ -42,6 +48,11 @@ type PoseFrame = {
   aimX?: number | null;
   aimY?: number | null;
   turretId?: 'left' | 'right' | null;
+  pressure?: number | null;
+  hp?: number | null;
+  lifeState?: 'alive' | 'downed' | 'dead' | null;
+  downedRemain?: number | null;
+  deathCause?: 'timer' | 'redeploy' | 'solo' | null;
 };
 
 type FireDetail = {
@@ -86,6 +97,18 @@ export class WebSocketSession extends EventTarget {
     this._open();
   }
 
+  /**
+   * 记下身份但不打开 WebSocket（本地开发默认断线）。
+   * 之后可通过 joinRoom / createRoom / connect 手动连上。
+   */
+  prepareOffline(identity: PlayerIdentity): void {
+    this.identity = { ...identity };
+    this.manualClose = true;
+    this.connected = false;
+    this.desiredRoomId = roomFromUrl();
+    this._emit('connectionchange', { status: 'offline' });
+  }
+
   disconnect(): void {
     this.manualClose = true;
     this._clearTimers();
@@ -122,6 +145,29 @@ export class WebSocketSession extends EventTarget {
     }
     if (frame.turretId === 'left' || frame.turretId === 'right') {
       payload.turretId = frame.turretId;
+    }
+    if (frame.pressure != null && Number.isFinite(frame.pressure)) {
+      payload.pressure = frame.pressure;
+    }
+    if (frame.hp != null && Number.isFinite(frame.hp)) {
+      payload.hp = frame.hp;
+    }
+    if (
+      frame.lifeState === 'alive' ||
+      frame.lifeState === 'downed' ||
+      frame.lifeState === 'dead'
+    ) {
+      payload.lifeState = frame.lifeState;
+    }
+    if (frame.downedRemain != null && Number.isFinite(frame.downedRemain)) {
+      payload.downedRemain = frame.downedRemain;
+    }
+    if (
+      frame.deathCause === 'timer' ||
+      frame.deathCause === 'redeploy' ||
+      frame.deathCause === 'solo'
+    ) {
+      payload.deathCause = frame.deathCause;
     }
     this._send(payload);
   }
@@ -174,6 +220,35 @@ export class WebSocketSession extends EventTarget {
       payload.ammoType = ammo;
     }
     this._send(payload);
+  }
+
+  /** 发送医疗箱治疗意图（服务端校验耐久与距离）。 */
+  sendHeal(detail: {
+    targetId?: string | null;
+    handIndex?: number;
+    dt?: number;
+    aimX?: number;
+    aimY?: number;
+  }): void {
+    this._send({
+      type: 'heal',
+      protocolVersion: PROTOCOL_VERSION,
+      targetId: detail.targetId || null,
+      handIndex: detail.handIndex,
+      dt: detail.dt ?? 0.1,
+      aimX: detail.aimX,
+      aimY: detail.aimY,
+    });
+  }
+
+  /** 发送医箱复活濒死队友意图（服务端消耗整箱）。 */
+  sendRevive(detail: { targetId: string; handIndex?: number }): void {
+    this._send({
+      type: 'revive',
+      protocolVersion: PROTOCOL_VERSION,
+      targetId: detail.targetId,
+      handIndex: detail.handIndex,
+    });
   }
 
   /** 发送库存意图（transfer / reload / crate 等）。 */
@@ -365,6 +440,14 @@ export class WebSocketSession extends EventTarget {
       this._emit('weaponfired', payload);
       return;
     }
+    if (type === 'player_healed') {
+      this._emit('playerhealed', payload);
+      return;
+    }
+    if (type === 'player_revived') {
+      this._emit('playerrevived', payload);
+      return;
+    }
     if (type === 'inv_snapshot') {
       this._emit('invsnapshot', payload);
       return;
@@ -449,5 +532,6 @@ export function installLiminalNetwork(): void {
     POSE_RATE_HZ,
     PUBLIC_ROOM_ID,
     createSession,
+    isLocalDevHost,
   } as LiminalNetworkApi;
 }

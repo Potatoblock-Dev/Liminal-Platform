@@ -34,7 +34,7 @@
 - **库存与双手**：地面掉落、背包、双手持物；弹药、煤炭、废料、炮塔弹等可搬运与装填。
 - **战斗**：手持武器射击；卫兵车厢可入座操作炮塔（人数少时可一人控双塔）。
 - **列车驾驶**：油门 / 刹车、燃料消耗；汽笛等反馈。
-- **自动化（枢机）**：在控制台为指定车厢写「条件 → 行为」规则（持续判定有优先级；瞬时触发为边沿）。详见 [`docs/liminal-auto-program.md`](docs/liminal-auto-program.md)。
+- **自动化（枢机）**：在控制台为指定车厢写「条件 → 行为」规则（统一优先级列表；while/edge 为行属性；冲突域互斥）。详见 [`docs/liminal-auto-program.md`](docs/liminal-auto-program.md)。
 
 ### 联机
 
@@ -67,20 +67,46 @@ python3 scripts/prepare_liminal_release.py
 
 ```
 改玩法 / 协议 / 资源     →  本仓 Liminal-Platform
-登录、大厅入口、MCS CD   →  Potatoblock-Game（push 时 vendor 本仓 games 包）
+登录、大厅入口、MCS CD   →  Potatoblock-Game（vendor 进 games/* → CD → /app）
+```
+
+### CD（配置驱动，无包名硬编码）
+
+| 步骤 | 仓 | 触发 |
+|------|-----|------|
+| SoT CI | 本仓 | `.github/workflows/ci.yml` — prepare + mapping 冒烟 |
+| Vendor | 本仓 → Game | `.github/workflows/vendor-to-game.yml` — 读 `potatoblock-vendor.json` |
+| MCS | Game | 既有 `deploy.yml` → `deploy.py` → **`MCSM_UPLOAD_DIR` 默认 `/app`** |
+
+扩展新 SoT：复制 `potatoblock-vendor.json` 的 `mappings` / `prepare` / `runtime`，不必改 Game 的 `deploy.py`。
+
+**生产路径（与 config `runtime` 一致）：**
+
+| 角色 | 路径 |
+|------|------|
+| MCS 解压根 | `/app` |
+| 月台代码 | `/app/games/liminal_platform` |
+| 大厅代码 | `/app/games/avatar_lobby` |
+| HTTP | `/liminal-platform`、`/avatar-lobby` |
+| 静态 | `/static/games/liminal-platform`、`/static/games/avatar-lobby` |
+
+**Liminal Actions Secret：** `POTATOBLOCK_GAME_TOKEN`（Contents: Write on Potatoblock-Game）。本地也可：
+
+```bash
+POTATOBLOCK_GAME_TOKEN=… python scripts/vendor_to_game.py
 ```
 
 | Token（本地 `potatogame/.env`） | 用途 |
 |--|--|
 | `LIMINAL_PLATFORM_GH_TOKEN` | 推送 **本仓** |
-| `GH_TOKEN` | 推送 Potatoblock-Game（上线） |
+| `GH_TOKEN` | 本地直推 Potatoblock-Game（可选；CI vendor 用 `POTATOBLOCK_GAME_TOKEN`） |
 
 ```bash
-# 只更新本仓
+# 只更新本仓（推 main 后 Actions 可自动 vendor → Game → MCS）
 python3 ~/.cursor/skills/potatoblock-deploy/scripts/push-liminal-platform.py \
   --message "feat: …"
 
-# 上主站（经 Game CD → MCS）
+# 本地手动 vendor（跳过 SoT Actions 时）
 python3 ~/.cursor/skills/potatoblock-deploy/scripts/push-github.py \
   --worktree …/potatogame/.deploy-worktree \
   --package …/potatogame/potatoblock-avatar-lobby \
@@ -122,7 +148,10 @@ Liminal-Platform/
 │   ├── networking-plan.md    # 皮套大厅联网（旁路，非月台协议）
 │   ├── skin-format.md
 │   └── motion-references.md
+├── potatoblock-vendor.json   # SoT → Game 路径映射（CD 扩展面）
 ├── scripts/prepare_liminal_release.py
+├── scripts/potatoblock_vendor.py / vendor_to_game.py
+├── .github/workflows/        # ci + vendor-to-game
 ├── game/Liminal_Platform/    # 开发镜像（与挂载包同步）
 └── app/
     ├── main.py / routers/    # 仅本地 stub（不上 Game 仓）
