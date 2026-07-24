@@ -1,0 +1,40 @@
+# Lightweight SoT checks (prepare smoke). Production deploy: vendor → Game → MCS.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  prepare-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepare + verify mappings
+        run: |
+          python -c "
+          from pathlib import Path
+          import sys
+          root = Path('.').resolve()
+          sys.path.insert(0, str(root / 'scripts'))
+          from potatoblock_vendor import collect_mapped_files, load_config, run_prepare
+          cfg = load_config(root)
+          assert cfg, 'potatoblock-vendor.json required'
+          run_prepare(root, cfg, skip_build=False)
+          files = collect_mapped_files(root, cfg)
+          print(f'mapped {len(files)} files')
+          assert files, 'mappings produced no files'
+          "
