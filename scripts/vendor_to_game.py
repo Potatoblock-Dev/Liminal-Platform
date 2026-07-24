@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 import shutil
 import subprocess
@@ -28,11 +29,13 @@ from potatoblock_vendor import apply_mappings, load_config, run_prepare  # noqa:
 
 
 def _run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> None:
-    """Run a command; redact token URLs in logs."""
+    """Run a command; redact token URLs / Authorization headers in logs."""
     shown = []
     for part in cmd:
         if part.startswith("https://x-access-token:"):
             shown.append("https://x-access-token:***@github.com/…")
+        elif part.startswith("http.extraHeader=Authorization:"):
+            shown.append("http.extraHeader=Authorization: ***")
         else:
             shown.append(part)
     print("+", " ".join(shown), flush=True)
@@ -42,6 +45,24 @@ def _run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> No
 def _git_output(cmd: list[str], cwd: Path) -> str:
     """Return stripped stdout from git."""
     return subprocess.check_output(cmd, cwd=cwd, text=True).strip()
+
+
+def _git_auth_args(token: str) -> list[str]:
+    """Auth via Basic header; clear Actions-injected github.com extraheader.
+
+    In GitHub Actions, checkout/job setup often sets
+    http.https://github.com/.extraheader to GITHUB_TOKEN, which only covers
+    the SoT repo and overrides URL-embedded PATs on push to another repo.
+    """
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    return [
+        "-c",
+        "credential.helper=",
+        "-c",
+        "http.https://github.com/.extraheader=",
+        "-c",
+        f"http.extraHeader=Authorization: Basic {basic}",
+    ]
 
 
 def main() -> None:
@@ -88,9 +109,17 @@ def main() -> None:
             print(f"dry-run ok → {worktree} (not pushed)")
             return
 
-        clone_url = f"https://x-access-token:{token}@github.com/{repo}.git"
+        # Use clean HTTPS remote + header auth (not token-in-URL) so Actions
+        # GITHUB_TOKEN extraheader cannot steal the push.
+        remote_url = f"https://github.com/{repo}.git"
         worktree = work / "game"
-        _run(["git", "clone", "--depth", "1", "--branch", branch, clone_url, str(worktree)])
+        auth = _git_auth_args(token)
+        env = os.environ.copy()
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        _run(
+            ["git", *auth, "clone", "--depth", "1", "--branch", branch, remote_url, str(worktree)],
+            env=env,
+        )
         apply_mappings(package_root, worktree, cfg)
 
         status = _git_output(["git", "status", "--porcelain"], worktree)
@@ -102,7 +131,11 @@ def main() -> None:
         _run(["git", "config", "user.email", "vendor@users.noreply.github.com"], cwd=worktree)
         _run(["git", "add", "-A"], cwd=worktree)
         _run(["git", "commit", "-m", message], cwd=worktree)
-        _run(["git", "push", "origin", f"HEAD:{branch}"], cwd=worktree)
+        _run(
+            ["git", *auth, "push", remote_url, f"HEAD:{branch}"],
+            cwd=worktree,
+            env=env,
+        )
         print(f"vendored → {repo}@{branch}")
         print("Game repo Actions deploy.yml will sync MCS /app")
     finally:
