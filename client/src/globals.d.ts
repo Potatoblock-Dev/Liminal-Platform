@@ -75,6 +75,9 @@ export type WebSocketSessionLike = EventTarget & {
     turretId?: 'left' | 'right' | null;
     pressure?: number | null;
     hp?: number | null;
+    lifeState?: 'alive' | 'downed' | 'dead' | null;
+    downedRemain?: number | null;
+    deathCause?: 'timer' | 'redeploy' | 'solo' | null;
   }) => void;
   sendTrain: (state: { throttle?: number; brake?: number }) => void;
   sendFuelAdd: (amount?: number, itemId?: string) => void;
@@ -110,6 +113,10 @@ declare global {
     LpCombat?: {
       spawnProjectile?: (detail: Record<string, unknown>) => void;
       getHeldWeaponItem?: () => { id: string } | null | undefined;
+      playFireSfxAt?: (weaponId: string | undefined, x: number, y: number) => void;
+    };
+    LpMedkit?: {
+      applyHealed?: (detail: Record<string, unknown>) => void;
     };
     LpTrainDrive?: {
       applyAuthority?: (train: unknown) => void;
