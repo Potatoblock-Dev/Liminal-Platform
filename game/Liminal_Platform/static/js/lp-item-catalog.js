@@ -352,6 +352,7 @@
       short: '医',
       type: 'medical',
       use: '车厢急救标配。握在手里对准自己可缓慢包扎；对准近旁队友时效力更强——别等血见底才翻箱子。',
+      icon: '/static/games/liminal-platform/img/items/medkit-icon.png?v=1',
       color: '#7f1d1d',
       accent: '#fca5a5',
       maxStack: 1,
