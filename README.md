@@ -150,4 +150,4 @@ Liminal-Platform/
 
 ## License / 素材
 
-代码归属 Potatoblock-Dev。第三方素材（如 Kenney Mobile Controls）遵循其各自许可证（多为 CC0）；使用时保留原作者说明即可。
+代码归属 Potatoblock-Dev。第三方素材（Kenney Mobile Controls、Kenney Game Icons、Kenney Input Prompts Pixel 等）遵循其各自许可证（多为 CC0）；使用时保留原作者说明即可。图标目录见 `app/games/liminal_platform/static/img/ui/`。
