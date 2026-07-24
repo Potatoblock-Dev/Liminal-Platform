@@ -343,21 +343,21 @@
       fireSoundVolume: 0.4,
     },
     /**
-     * 医疗箱：手部 3 号槽（index 2，工具槽）持有；对准自己或近距队友按开火键持续治疗。
-     * 足迹默认宽 2 × 高 1；耐久存 stack.dur。
+     * 急救箱：手部 3 号槽（index 2，工具槽）持有；对准自己或近距队友按开火键持续治疗。
+     * 足迹宽 2 × 高 2；耐久存 stack.dur。
      */
     medkit: {
       id: 'medkit',
-      name: '医疗箱',
-      short: '医',
+      name: '急救箱',
+      short: '救',
       type: 'medical',
       use: '车厢急救标配。握在手里对准自己可缓慢包扎；对准近旁队友时效力更强——别等血见底才翻箱子。',
-      icon: '/static/games/liminal-platform/img/items/medkit-icon.png?v=1',
+      icon: '/static/games/liminal-platform/img/items/medkit-icon.png?v=2',
       color: '#7f1d1d',
       accent: '#fca5a5',
       maxStack: 1,
       w: 2,
-      h: 1,
+      h: 2,
       canHoldInHand: true,
       /** 仅手部 3 号（utility index 2）；主手 0/1 仍只收武器。 */
       handSlot: 2,

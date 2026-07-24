@@ -86,7 +86,7 @@ ITEMS: Dict[str, Dict[str, Any]] = {
     "medkit": {
         "maxStack": 1,
         "w": 2,
-        "h": 1,
+        "h": 2,
         "type": "medical",
         "canHold": True,
         "maxDurability": 40,

@@ -39,26 +39,28 @@ def _git_output(cmd: list[str], cwd: Path) -> str:
 
 
 def _git_env(token: str, work: Path) -> dict[str, str]:
-    """Isolate git from Actions global config; auth via ~/.netrc (no PAT on argv).
+    """Private HOME with url.insteadOf auth — PAT never appears on argv.
 
-    Runners often set http.https://github.com/.extraheader to GITHUB_TOKEN.
-    Clearing it with an empty -c value still blocks other auth. A private HOME
-    + .netrc avoids both the job token and Actions secret-masking of argv.
+    Actions masks secrets in process argv and can break `git -c ...<token>...`.
+    Writing insteadOf into $HOME/.gitconfig avoids that and bypasses the job
+    GITHUB_TOKEN extraheader on the runner.
     """
     home = work / "git-home"
     home.mkdir(parents=True, exist_ok=True)
-    netrc = home / ".netrc"
-    netrc.write_text(
-        f"machine github.com\nlogin x-access-token\npassword {token}\n",
+    # insteadOf rewrites https://github.com/… → authenticated URL.
+    (home / ".gitconfig").write_text(
+        "[url \"https://x-access-token:"
+        + token
+        + "@github.com/\"]\n"
+        "\tinsteadOf = https://github.com/\n",
         encoding="utf-8",
     )
-    netrc.chmod(0o600)
+    (home / ".gitconfig").chmod(0o600)
 
     env = os.environ.copy()
     env["HOME"] = str(home)
     env["GIT_TERMINAL_PROMPT"] = "0"
-    # Ignore runner global/system gitconfig (GITHUB_TOKEN extraheader, etc.).
-    env["GIT_CONFIG_GLOBAL"] = os.devnull
+    # Do not inherit runner system gitconfig (job token headers).
     env["GIT_CONFIG_SYSTEM"] = os.devnull
     for k in (
         "GITHUB_TOKEN",
@@ -67,6 +69,7 @@ def _git_env(token: str, work: Path) -> dict[str, str]:
         "POTATOBLOCK_GAME_TOKEN",
         "GIT_ASKPASS",
         "SSH_ASKPASS",
+        "GIT_CONFIG_GLOBAL",
     ):
         env.pop(k, None)
     return env
