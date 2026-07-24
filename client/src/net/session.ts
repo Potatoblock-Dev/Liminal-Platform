@@ -100,10 +100,12 @@ export function installLiminalSession(): void {
           remote._lpDisconnected = true;
           remote._turretId = null;
         }
+        window.LpHummingbirdDrone?.clearRemote?.(id);
         syncGuardTurretOperators();
         return;
       }
       remotePlayers.delete(id);
+      window.LpHummingbirdDrone?.clearRemote?.(id);
       syncGuardTurretOperators();
     }) as EventListener);
     session.addEventListener('appearance', ((event: CustomEvent) => {
@@ -115,6 +117,7 @@ export function installLiminalSession(): void {
       remotePlayers.clear();
       clockOffsetMs = null;
       window.LpGuardTurret?.syncRemoteOperators?.([]);
+      window.LpHummingbirdDrone?.clearAllRemotes?.();
     });
     session.addEventListener('fuelchanged', ((event: CustomEvent) => {
       const level = event.detail?.level;
@@ -270,18 +273,36 @@ export function installLiminalSession(): void {
     window.LpGuardTurret?.syncRemoteOperators?.(operators);
   }
 
-  /** 应用世界快照：远端姿态 + 共享列车/燃料。 */
+  /** 应用世界快照：远端姿态 + 共享列车/燃料；本机无人机软矫正。 */
   function applyWorldSnapshot(payload: Extract<ServerMessage, { type: 'world_snapshot' }> | null): void {
     if (!payload) return;
     const serverMs = mapServerMs(payload.serverTimeMs);
     const seen = new Set<string>();
     for (const player of payload.players || []) {
       const id = String(player.id);
-      if (!id || id === localUserId) continue;
+      if (!id) continue;
+      if (id === localUserId) {
+        if (
+          player.droneX != null &&
+          player.droneY != null &&
+          Number.isFinite(Number(player.droneX)) &&
+          Number.isFinite(Number(player.droneY))
+        ) {
+          window.LpHummingbirdDrone?.applyServerPose?.({
+            droneX: Number(player.droneX),
+            droneY: Number(player.droneY),
+            droneVx: player.droneVx != null ? Number(player.droneVx) : undefined,
+            droneVy: player.droneVy != null ? Number(player.droneVy) : undefined,
+            droneAim: player.droneAim != null ? Number(player.droneAim) : undefined,
+          });
+        }
+        continue;
+      }
       seen.add(id);
       if (player.connected === false) {
         const existing = remotePlayers.get(id);
         if (existing) existing._lpDisconnected = true;
+        window.LpHummingbirdDrone?.clearRemote?.(id);
         continue;
       }
       const remote = ensureRemote(id, player);
@@ -303,9 +324,29 @@ export function installLiminalSession(): void {
       applyRemoteHold(remote, player);
       if (player.appearance) Entity.loadAppearance(remote, player.appearance);
       remote.nickname = player.nickname || remote.nickname;
+      if (
+        player.droneX != null &&
+        player.droneY != null &&
+        Number.isFinite(Number(player.droneX)) &&
+        Number.isFinite(Number(player.droneY))
+      ) {
+        window.LpHummingbirdDrone?.applyRemotePose?.(id, {
+          droneX: Number(player.droneX),
+          droneY: Number(player.droneY),
+          droneVx: player.droneVx != null ? Number(player.droneVx) : 0,
+          droneVy: player.droneVy != null ? Number(player.droneVy) : 0,
+          droneAim: player.droneAim != null ? Number(player.droneAim) : 0,
+          dronePhase: player.dronePhase != null ? Number(player.dronePhase) : 0,
+        });
+      } else {
+        window.LpHummingbirdDrone?.clearRemote?.(id);
+      }
     }
     for (const id of [...remotePlayers.keys()]) {
-      if (!seen.has(id)) remotePlayers.delete(id);
+      if (!seen.has(id)) {
+        remotePlayers.delete(id);
+        window.LpHummingbirdDrone?.clearRemote?.(id);
+      }
     }
 
     syncGuardTurretOperators();
@@ -351,6 +392,7 @@ export function installLiminalSession(): void {
     const extras = window.LpPlayerDeath?.poseExtras?.() || {};
     const lifeState =
       frame.lifeState || extras.lifeState || window.LpGame?.getLifeState?.() || 'alive';
+    const drone = window.LpHummingbirdDrone?.poseExtras?.() || null;
     session.sendPose({
       sequence: poseSequence,
       x: frame.x,
@@ -388,6 +430,12 @@ export function installLiminalSession(): void {
               extras.deathCause === 'solo'
             ? extras.deathCause
             : null,
+      droneX: drone?.droneX ?? null,
+      droneY: drone?.droneY ?? null,
+      droneVx: drone?.droneVx ?? null,
+      droneVy: drone?.droneVy ?? null,
+      droneAim: drone?.droneAim ?? null,
+      dronePhase: drone?.dronePhase ?? null,
     });
   }
 
@@ -453,6 +501,7 @@ export function installLiminalSession(): void {
         }
       }
     }
+    window.LpHummingbirdDrone?.tickRemotes?.(dt);
   }
 
   /** 远端默认瞄准点。 */
@@ -464,7 +513,7 @@ export function installLiminalSession(): void {
     return { x: (remote.x ?? 0) + facing * 140, y: (remote.y ?? 0) - 56 };
   }
 
-  /** 绘制远端玩家（持枪层序与本机一致；入座炮塔时不画手持枪）。 */
+  /** 绘制远端玩家（持枪层序与本机一致；入座炮塔时不画手持枪；伴飞无人机另绘）。 */
   function drawRemotes(
     ctx: CanvasRenderingContext2D,
     view: unknown,
@@ -476,7 +525,10 @@ export function installLiminalSession(): void {
         remote._turretId === 'left' || remote._turretId === 'right';
       const heldId = inTurret ? null : remote._heldId;
       const item =
-        heldId && remote._lpLifeState !== 'downed' && remote._lpLifeState !== 'dead'
+        heldId &&
+        remote._lpLifeState !== 'downed' &&
+        remote._lpLifeState !== 'dead' &&
+        !window.LpItemCatalog?.isCompanionDrone?.(heldId)
           ? window.LpItemCatalog?.getItem?.(heldId)
           : null;
       if (item && window.LpWeaponHold?.drawHeldWeapon) {
@@ -491,6 +543,7 @@ export function installLiminalSession(): void {
         Entity.drawAvatar(ctx, remote, view, dpr);
       }
     }
+    window.LpHummingbirdDrone?.drawRemotes?.(ctx);
   }
 
   function setAppearance(appearance: { skinId?: string | null }): void {

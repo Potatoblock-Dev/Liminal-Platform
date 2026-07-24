@@ -53,6 +53,12 @@ type PoseFrame = {
   lifeState?: 'alive' | 'downed' | 'dead' | null;
   downedRemain?: number | null;
   deathCause?: 'timer' | 'redeploy' | 'solo' | null;
+  droneX?: number | null;
+  droneY?: number | null;
+  droneVx?: number | null;
+  droneVy?: number | null;
+  droneAim?: number | null;
+  dronePhase?: number | null;
 };
 
 type FireDetail = {
@@ -168,6 +174,32 @@ export class WebSocketSession extends EventTarget {
       frame.deathCause === 'solo'
     ) {
       payload.deathCause = frame.deathCause;
+    }
+    if (
+      frame.droneX != null &&
+      frame.droneY != null &&
+      Number.isFinite(frame.droneX) &&
+      Number.isFinite(frame.droneY)
+    ) {
+      payload.droneX = frame.droneX;
+      payload.droneY = frame.droneY;
+      if (frame.droneVx != null && Number.isFinite(frame.droneVx)) {
+        payload.droneVx = frame.droneVx;
+      }
+      if (frame.droneVy != null && Number.isFinite(frame.droneVy)) {
+        payload.droneVy = frame.droneVy;
+      }
+      if (frame.droneAim != null && Number.isFinite(frame.droneAim)) {
+        payload.droneAim = frame.droneAim;
+      }
+      if (
+        frame.dronePhase != null &&
+        Number.isFinite(frame.dronePhase) &&
+        frame.dronePhase >= 0 &&
+        frame.dronePhase <= 3
+      ) {
+        payload.dronePhase = frame.dronePhase;
+      }
     }
     this._send(payload);
   }

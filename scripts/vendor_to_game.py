@@ -108,25 +108,35 @@ def main() -> None:
         # Potatoblock-Game is public — clone succeeds without auth. Fail fast if
         # the Actions secret cannot push (common mis-paste of Liminal-only PAT).
         import json
-        import urllib.error
-        import urllib.request
+        import subprocess
 
-        req = urllib.request.Request(
-            f"https://api.github.com/repos/{repo}",
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "User-Agent": "potatoblock-vendor",
-            },
+        probe = subprocess.run(
+            [
+                "curl",
+                "-sS",
+                "-H",
+                "Accept: application/vnd.github+json",
+                "-H",
+                f"Authorization: Bearer {token}",
+                "-H",
+                "User-Agent: potatoblock-vendor",
+                f"https://api.github.com/repos/{repo}",
+            ],
+            capture_output=True,
+            text=True,
         )
+        if probe.returncode != 0:
+            raise SystemExit(f"token probe failed: {probe.stderr.strip() or probe.stdout[:200]}")
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                meta = json.load(resp)
-        except urllib.error.HTTPError as exc:
+            meta = json.loads(probe.stdout)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"token probe: bad JSON from GitHub API") from exc
+        if meta.get("message") and "permissions" not in meta:
             raise SystemExit(
-                f"POTATOBLOCK_GAME_TOKEN rejected by GitHub API ({exc.code}). "
-                "Update Liminal Actions secret with .env GH_TOKEN (Game Contents: Write)."
-            ) from exc
+                f"POTATOBLOCK_GAME_TOKEN rejected by GitHub API ({meta.get('message')}). "
+                "Update Liminal Actions secret with .env GH_TOKEN / "
+                "POTATOBLOCK_GAME_VENDOR_TOKEN (Game Contents: Write)."
+            )
         perms = meta.get("permissions") or {}
         if not perms.get("push"):
             raise SystemExit(

@@ -47,6 +47,15 @@ export type ClientMessage =
       downedRemain?: number | null;
       /** 最终死亡原因：timer | redeploy | solo（仅 lifeState=dead）。 */
       deathCause?: 'timer' | 'redeploy' | 'solo' | null;
+      /** 伴飞无人机世界坐标（本地权威；缺省=无伴飞）。 */
+      droneX?: number;
+      droneY?: number;
+      droneVx?: number;
+      droneVy?: number;
+      /** 炮管瞄准角（弧度）。 */
+      droneAim?: number;
+      /** 0=hover 1=grab 2=fiddle 3=release。 */
+      dronePhase?: number;
     }
   | {
       type: 'train';
@@ -153,6 +162,13 @@ export type SnapshotPlayer = {
   lifeState?: 'alive' | 'downed' | 'dead';
   downedRemain?: number | null;
   deathCause?: 'timer' | 'redeploy' | 'solo' | null;
+  /** 伴飞无人机位姿回显（有则远端绘制）。 */
+  droneX?: number;
+  droneY?: number;
+  droneVx?: number;
+  droneVy?: number;
+  droneAim?: number;
+  dronePhase?: number;
 };
 
 export type WorldTrain = {

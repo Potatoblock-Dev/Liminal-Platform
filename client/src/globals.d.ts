@@ -78,6 +78,12 @@ export type WebSocketSessionLike = EventTarget & {
     lifeState?: 'alive' | 'downed' | 'dead' | null;
     downedRemain?: number | null;
     deathCause?: 'timer' | 'redeploy' | 'solo' | null;
+    droneX?: number | null;
+    droneY?: number | null;
+    droneVx?: number | null;
+    droneVy?: number | null;
+    droneAim?: number | null;
+    dronePhase?: number | null;
   }) => void;
   sendTrain: (state: { throttle?: number; brake?: number }) => void;
   sendFuelAdd: (amount?: number, itemId?: string) => void;
@@ -163,6 +169,39 @@ declare global {
     };
     LpItemCatalog?: {
       getItem?: (id: string) => unknown;
+      isCompanionDrone?: (id: string) => boolean;
+    };
+    LpHummingbirdDrone?: {
+      poseExtras?: () => {
+        droneX: number;
+        droneY: number;
+        droneVx: number;
+        droneVy: number;
+        droneAim: number;
+        dronePhase: number;
+      } | null;
+      applyServerPose?: (pose: {
+        droneX?: number;
+        droneY?: number;
+        droneVx?: number;
+        droneVy?: number;
+        droneAim?: number;
+      }) => void;
+      applyRemotePose?: (
+        playerId: string,
+        pose: {
+          droneX?: number;
+          droneY?: number;
+          droneVx?: number;
+          droneVy?: number;
+          droneAim?: number;
+          dronePhase?: number;
+        } | null
+      ) => void;
+      clearRemote?: (playerId: string) => void;
+      clearAllRemotes?: () => void;
+      tickRemotes?: (dt: number) => void;
+      drawRemotes?: (ctx: CanvasRenderingContext2D) => void;
     };
     LpWeaponHold?: {
       drawHeldWeapon?: (

@@ -29,7 +29,7 @@
 | `type` | 说明 |
 |--|--|
 | `join` / `create` | 进房 / 建房（带 `protocolVersion`） |
-| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`、`turretId`、`pressure`、`hp`、`lifeState`、`downedRemain`、`deathCause`） |
+| `pose` | 姿态（含可选 `aimX`/`aimY`、`heldId`、`turretId`、`pressure`、`hp`、`lifeState`、`downedRemain`、`deathCause`、`droneX`/`droneY`/`droneVx`/`droneVy`/`droneAim`/`dronePhase`） |
 | `train` | 油门/刹车 |
 | `fuel_add` | 加燃料意图 |
 | `fire` | 开火（炮塔可带 `turretId` / `shots[]` 双联枪口） |
@@ -87,6 +87,18 @@
 | `SnapshotPlayer.*` | S→C | 快照回显；客户端写入远端 `_lpHp` / `_lpLifeState` 等 |
 
 压力 / 濒死细节见 `app/games/liminal_platform/docs/pressure.md`。
+
+## 蜂鸟护卫无人机伴飞（可选字段）
+
+| 字段 | 方向 | 说明 |
+|--|--|--|
+| `pose.droneX` / `droneY` | C→S | 伴飞体世界坐标；**客户端模拟、本地权威**；省略=无伴飞 |
+| `pose.droneVx` / `droneVy` | C→S | 速度（远端平滑用） |
+| `pose.droneAim` | C→S | 炮管瞄准角（弧度） |
+| `pose.dronePhase` | C→S | `0` hover / `1` grab / `2` fiddle / `3` release（装填表演） |
+| `SnapshotPlayer.drone*` | S→C | 服务端原样回显广播；本机可软矫正，远端平滑追目标 |
+
+服务端**不**模拟无人机物理或开火；仅存储并转发主人上报的位姿。弹道仍走既有本地先行 / `weapon_fired`（若后续接入）。
 
 ## 前端构建
 
