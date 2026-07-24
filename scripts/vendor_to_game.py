@@ -104,6 +104,38 @@ def main() -> None:
     if not token and not args.dry_run:
         raise SystemExit("set POTATOBLOCK_GAME_TOKEN (contents:write on Potatoblock-Game)")
 
+    if token and not args.dry_run:
+        # Potatoblock-Game is public — clone succeeds without auth. Fail fast if
+        # the Actions secret cannot push (common mis-paste of Liminal-only PAT).
+        import json
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{repo}",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "potatoblock-vendor",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                meta = json.load(resp)
+        except urllib.error.HTTPError as exc:
+            raise SystemExit(
+                f"POTATOBLOCK_GAME_TOKEN rejected by GitHub API ({exc.code}). "
+                "Update Liminal Actions secret with .env GH_TOKEN (Game Contents: Write)."
+            ) from exc
+        perms = meta.get("permissions") or {}
+        if not perms.get("push"):
+            raise SystemExit(
+                "POTATOBLOCK_GAME_TOKEN can read but not push Potatoblock-Game. "
+                "Use potatoblock-deploy / GH_TOKEN (Contents: Write on Game), "
+                "not the Liminal-only PAT."
+            )
+        print(f"token OK: push access on {repo}", flush=True)
+
     run_prepare(package_root, cfg, skip_build=args.skip_build)
 
     prefix = (cfg.get("commit_message_prefix") or "deploy: vendor").rstrip()
