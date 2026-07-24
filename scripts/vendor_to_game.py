@@ -34,8 +34,8 @@ def _run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> No
     for part in cmd:
         if part.startswith("https://x-access-token:"):
             shown.append("https://x-access-token:***@github.com/…")
-        elif part.startswith("http.extraHeader=Authorization:"):
-            shown.append("http.extraHeader=Authorization: ***")
+        elif "extraheader=AUTHORIZATION:" in part or "extraHeader=Authorization:" in part:
+            shown.append(part.split("=", 1)[0] + "=AUTHORIZATION: ***")
         else:
             shown.append(part)
     print("+", " ".join(shown), flush=True)
@@ -48,20 +48,18 @@ def _git_output(cmd: list[str], cwd: Path) -> str:
 
 
 def _git_auth_args(token: str) -> list[str]:
-    """Auth via Basic header; clear Actions-injected github.com extraheader.
+    """Auth like actions/checkout; clear job GITHUB_TOKEN extraheader first.
 
-    In GitHub Actions, checkout/job setup often sets
-    http.https://github.com/.extraheader to GITHUB_TOKEN, which only covers
-    the SoT repo and overrides URL-embedded PATs on push to another repo.
+    Actions injects http.https://github.com/.extraheader with the workflow
+    GITHUB_TOKEN (SoT repo only). That header wins over URL credentials and
+    breaks push to Potatoblock-Game. Replace it with our PAT Basic auth.
     """
     basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
     return [
         "-c",
         "credential.helper=",
         "-c",
-        "http.https://github.com/.extraheader=",
-        "-c",
-        f"http.extraHeader=Authorization: Basic {basic}",
+        f"http.https://github.com/.extraheader=AUTHORIZATION: basic {basic}",
     ]
 
 
@@ -116,6 +114,9 @@ def main() -> None:
         auth = _git_auth_args(token)
         env = os.environ.copy()
         env["GIT_TERMINAL_PROMPT"] = "0"
+        # Avoid Actions / local helpers picking the wrong token.
+        for k in ("GITHUB_TOKEN", "GH_TOKEN", "LIMINAL_PLATFORM_GH_TOKEN"):
+            env.pop(k, None)
         _run(
             ["git", *auth, "clone", "--depth", "1", "--branch", branch, remote_url, str(worktree)],
             env=env,
@@ -129,10 +130,21 @@ def main() -> None:
 
         _run(["git", "config", "user.name", "potatoblock-vendor"], cwd=worktree)
         _run(["git", "config", "user.email", "vendor@users.noreply.github.com"], cwd=worktree)
+        # Persist auth on this worktree only (survives -c quirks on push).
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        _run(
+            [
+                "git",
+                "config",
+                "http.https://github.com/.extraheader",
+                f"AUTHORIZATION: basic {basic}",
+            ],
+            cwd=worktree,
+        )
         _run(["git", "add", "-A"], cwd=worktree)
         _run(["git", "commit", "-m", message], cwd=worktree)
         _run(
-            ["git", *auth, "push", remote_url, f"HEAD:{branch}"],
+            ["git", *auth, "push", "origin", f"HEAD:{branch}"],
             cwd=worktree,
             env=env,
         )
