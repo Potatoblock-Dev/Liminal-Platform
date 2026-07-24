@@ -90,7 +90,16 @@ python3 scripts/prepare_liminal_release.py
 | HTTP | `/liminal-platform`、`/avatar-lobby` |
 | 静态 | `/static/games/liminal-platform`、`/static/games/avatar-lobby` |
 
-**Liminal Actions Secret：** `POTATOBLOCK_GAME_TOKEN`（Contents: Write on Potatoblock-Game）。本地也可：
+**Liminal Actions Secret：** `POTATOBLOCK_GAME_TOKEN`（Contents: Write on Potatoblock-Game）。  
+
+**推送 `.github/workflows/`：** `LIMINAL_PLATFORM_GH_TOKEN` 还需 **Workflows** 权限（classic PAT 的 `workflow` scope）。权限就绪后：
+
+```bash
+python3 ~/.cursor/skills/potatoblock-deploy/scripts/push-liminal-platform.py \
+  --include-workflows --skip-build --message "ci: enable vendor Actions"
+```
+
+并在 Liminal 仓配置 Secret `POTATOBLOCK_GAME_TOKEN`。在此之前 workflow 文件只在本地 `potatoblock-avatar-lobby/.github/workflows/`；可用本地 vendor：
 
 ```bash
 POTATOBLOCK_GAME_TOKEN=… python scripts/vendor_to_game.py
