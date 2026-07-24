@@ -33,7 +33,7 @@
 | `train` | 油门/刹车 |
 | `fuel_add` | 加燃料意图 |
 | `fire` | 开火（炮塔可带 `turretId` / `shots[]` 双联枪口） |
-| `inv` | 库存意图（`op` 等扩展字段） |
+| `inv` | 库存意图：`action`=`transfer` / `quick_transfer` / `consume` / `reload` / `crate` / `drop` / `rotate` / `sort`（`bag` 指 `player` 或 `storage`） |
 | `appearance` | 皮套 |
 | `chat` | 聊天（≤40 字） |
 | `ping` | 心跳（`t`） |
