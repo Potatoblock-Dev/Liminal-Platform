@@ -39,37 +39,34 @@ def _git_output(cmd: list[str], cwd: Path) -> str:
 
 
 def _git_env(token: str, work: Path) -> dict[str, str]:
-    """Build git env that authenticates without putting the PAT on argv.
+    """Isolate git from Actions global config; auth via ~/.netrc (no PAT on argv).
 
-    GitHub Actions masks secrets in command lines and can corrupt
-    `git -c http...AUTHORIZATION: basic <pat>` into a broken command.
-    ASKPASS keeps the token in a 0600 file instead.
+    Runners often set http.https://github.com/.extraheader to GITHUB_TOKEN.
+    Clearing it with an empty -c value still blocks other auth. A private HOME
+    + .netrc avoids both the job token and Actions secret-masking of argv.
     """
-    token_file = work / ".pat"
-    token_file.write_text(token, encoding="utf-8")
-    token_file.chmod(0o600)
-
-    askpass = work / "askpass.sh"
-    # Paths are under mkdtemp; no secret in this script body.
-    askpass.write_text(
-        "#!/bin/sh\n"
-        'case "$1" in\n'
-        "  Username*) echo x-access-token ;;\n"
-        f'  *) cat "{token_file}" ;;\n'
-        "esac\n",
+    home = work / "git-home"
+    home.mkdir(parents=True, exist_ok=True)
+    netrc = home / ".netrc"
+    netrc.write_text(
+        f"machine github.com\nlogin x-access-token\npassword {token}\n",
         encoding="utf-8",
     )
-    askpass.chmod(0o700)
+    netrc.chmod(0o600)
 
     env = os.environ.copy()
-    env["GIT_ASKPASS"] = str(askpass)
+    env["HOME"] = str(home)
     env["GIT_TERMINAL_PROMPT"] = "0"
-    # Prefer our PAT; drop job / other tokens that confuse HTTPS to github.com.
+    # Ignore runner global/system gitconfig (GITHUB_TOKEN extraheader, etc.).
+    env["GIT_CONFIG_GLOBAL"] = os.devnull
+    env["GIT_CONFIG_SYSTEM"] = os.devnull
     for k in (
         "GITHUB_TOKEN",
         "GH_TOKEN",
         "LIMINAL_PLATFORM_GH_TOKEN",
         "POTATOBLOCK_GAME_TOKEN",
+        "GIT_ASKPASS",
+        "SSH_ASKPASS",
     ):
         env.pop(k, None)
     return env
@@ -122,25 +119,8 @@ def main() -> None:
         remote_url = f"https://github.com/{repo}.git"
         worktree = work / "game"
         env = _git_env(token, work)
-        # Clear Actions-injected GITHUB_TOKEN header so ASKPASS is used.
-        auth_clear = [
-            "-c",
-            "credential.helper=",
-            "-c",
-            "http.https://github.com/.extraheader=",
-        ]
         _run(
-            [
-                "git",
-                *auth_clear,
-                "clone",
-                "--depth",
-                "1",
-                "--branch",
-                branch,
-                remote_url,
-                str(worktree),
-            ],
+            ["git", "clone", "--depth", "1", "--branch", branch, remote_url, str(worktree)],
             env=env,
         )
         apply_mappings(package_root, worktree, cfg)
@@ -150,15 +130,15 @@ def main() -> None:
             print("no file changes after vendor; skip push")
             return
 
-        _run(["git", "config", "user.name", "potatoblock-vendor"], cwd=worktree)
-        _run(["git", "config", "user.email", "vendor@users.noreply.github.com"], cwd=worktree)
-        _run(["git", "add", "-A"], cwd=worktree)
-        _run(["git", "commit", "-m", message], cwd=worktree)
+        _run(["git", "config", "user.name", "potatoblock-vendor"], cwd=worktree, env=env)
         _run(
-            ["git", *auth_clear, "push", "origin", f"HEAD:{branch}"],
+            ["git", "config", "user.email", "vendor@users.noreply.github.com"],
             cwd=worktree,
             env=env,
         )
+        _run(["git", "add", "-A"], cwd=worktree, env=env)
+        _run(["git", "commit", "-m", message], cwd=worktree, env=env)
+        _run(["git", "push", "origin", f"HEAD:{branch}"], cwd=worktree, env=env)
         print(f"vendored → {repo}@{branch}")
         print("Game repo Actions deploy.yml will sync MCS /app")
     finally:
