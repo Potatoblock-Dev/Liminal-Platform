@@ -228,6 +228,8 @@ export type ServerMessage =
       world?: {
         train?: WorldTrain;
         fuel?: WorldFuel;
+        /** 房间世界 RNG 种子（月台类型 / 地牢布局 / 月台仓物资）。 */
+        seed?: number;
       };
     }
   | {

@@ -132,6 +132,8 @@ declare global {
     LpGuardTurret?: {
       isManned?: () => boolean;
       getMannedId?: () => 'left' | 'right' | null;
+      /** 停靠或本机在月台时为 true（列车机炮抑制）。 */
+      isTrainWeaponSuppressed?: () => boolean;
       syncRemoteOperators?: (operators: Array<{
         playerId: string;
         turretId: 'left' | 'right';
@@ -160,6 +162,10 @@ declare global {
       anyPlayerOnPlatform?: () => boolean;
       canDepart?: () => boolean;
       getDepartBlockReason?: () => string | null;
+      getPlatformKind?: () => 'small' | 'large';
+      platformFloorAt?: (x: number) => number;
+      setWorldSeed?: (seed: number) => void;
+      getWorldSeed?: () => number;
       findActive?: (local: { x: number; y?: number; onGround?: boolean }) => {
         id: string;
         actionLabel: string;

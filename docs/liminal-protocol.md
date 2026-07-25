@@ -47,7 +47,7 @@
 | `type` | 说明 |
 |--|--|
 | `room_joined` / `room_error` / `room_removed` | 房间生命周期 |
-| `world_snapshot` | 玩家姿态（含可选 `turretId`）+ `world.train` / `world.fuel` |
+| `world_snapshot` | 玩家姿态（含可选 `turretId`）+ `world.train` / `world.fuel` / `world.seed` |
 | `player_join` / `player_leave` | `temporary` 表示断线宽限 |
 | `appearance` / `chat` | 外观与聊天广播 |
 | `fuel_changed` / `weapon_fired` | 燃料与远端弹道（`shots[]` 时多枪口） |
@@ -108,9 +108,14 @@
 |--|--|--|
 | `pose.scene` | C→S | `"train"` / `"platform"`；缺省按 `"train"`。服务端写入快照 |
 | `SnapshotPlayer.scene` | S→C | 回显；客户端只绘制与本机同场景的远端 |
-| 发车锁 | S | `handle_train`：任一在线玩家 `scene=platform` 时拒绝非零 `throttle` 并强制 `throttle=0` |
+| 发车锁 | S | `handle_train`：任一在线玩家 `scene=platform` 时拒绝非零 `throttle` 并强制 `throttle=0`；`step_train` 同步清零 |
+| 机炮锁 | S | `handle_fire`（`source=turret`）：射击者在月台、或房内任一人在月台时拒绝 |
+| `world.seed` | S→C | 房间创建时生成的世界 RNG 种子；客户端用 `hash(seed, stationIndex)` 判定大型/小型月台并生成地牢结构 |
+| `platform_storage` | 房间袋 | 小型月台仓库房共享仓；`inv` action `ensure_platform_storage` + `stationIndex` 按站首次填装 |
 
 下月台时客户端记住**连接处索引**（coupler index）；回车时在同连接处重生。停靠态 `atPlatform` 由客户端路线进度写入 `LpAutoSensors.setPlatformStub`（首通）。
+
+**大型月台**：现有灰块占位 + 编组编辑台。**小型月台**：客户端按种子生成侧视地牢（安全屋 / 敌房 / 仓库房）；结构不经服务端。
 
 ## 前端构建
 

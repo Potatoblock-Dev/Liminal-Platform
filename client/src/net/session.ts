@@ -128,6 +128,16 @@ export function installLiminalSession(): void {
     session.addEventListener('weaponfired', ((event: CustomEvent) => {
       const detail = event.detail || {};
       if (String(detail.playerId) === localUserId) return;
+      const isTurret =
+        detail.source === 'turret' || detail.weaponId === 'guard_turret';
+      /* 停靠/月台：列车武器本机已抑；远端回放也跳过，避免异场景弹道/音效渗入。 */
+      if (isTurret && window.LpGuardTurret?.isTrainWeaponSuppressed?.()) return;
+      const shooter = remotePlayers.get(String(detail.playerId));
+      const shooterScene =
+        shooter?._lpScene === 'platform' ? 'platform' : 'train';
+      const localScene =
+        window.LpPlatform?.getScene?.() === 'platform' ? 'platform' : 'train';
+      if (shooterScene !== localScene) return;
       const shots = Array.isArray(detail.shots) && detail.shots.length > 0
         ? detail.shots
         : [
@@ -150,7 +160,7 @@ export function installLiminalSession(): void {
           ammoType: detail.ammoType,
         });
       }
-      if (detail.source === 'turret' || detail.weaponId === 'guard_turret') {
+      if (isTurret) {
         window.LpGuardTurret?.noteRemoteFire?.(detail);
       } else {
         const primary = shots[0];
@@ -359,6 +369,9 @@ export function installLiminalSession(): void {
     if (world?.train) window.LpTrainDrive?.applyAuthority?.(world.train);
     if (world?.fuel?.level != null) {
       window.LiminalInteract?.setFuelLevel?.(world.fuel.level);
+    }
+    if (world?.seed != null && Number.isFinite(Number(world.seed))) {
+      window.LpPlatform?.setWorldSeed?.(Number(world.seed));
     }
   }
 
